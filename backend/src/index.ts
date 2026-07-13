@@ -60,11 +60,30 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
       uploadedAt: Date.now(),
     });
 
+    // For each column, collect its distinct values (capped) so the frontend
+    // can offer a "filter by value" dropdown, e.g. Gender -> ["Male", "Female"].
+    const MAX_UNIQUE_VALUES = 50;
+    const uniqueValues: Record<string, string[]> = {};
+    for (const col of columns) {
+      const seen = new Set<string>();
+      for (const row of rows) {
+        const val = String(row[col]).trim();
+        if (val !== "") seen.add(val);
+        if (seen.size > MAX_UNIQUE_VALUES) break;
+      }
+      // Only expose as a filter dropdown if it's a reasonably small set of
+      // repeated values (categorical), not something like a unique ID/name column.
+      if (seen.size > 0 && seen.size <= MAX_UNIQUE_VALUES) {
+        uniqueValues[col] = Array.from(seen).sort();
+      }
+    }
+
     res.json({
       fileId,
       columns,
       preview: rows.slice(0, 5),
       rowCount: rows.length,
+      uniqueValues,
     });
   } catch (err) {
     console.error(err);
@@ -72,16 +91,19 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
   }
 });
 
-// POST /api/sort - body: { fileId, column, order }, returns sorted .xlsx as a download
-app.post("/api/sort", (req: Request, res: Response) => {
-  const { fileId, column, order } = req.body as {
+// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder? }
+// Filters rows (optional), sorts them (optional), and returns the result as a downloadable .xlsx.
+app.post("/api/export", (req: Request, res: Response) => {
+  const { fileId, filterColumn, filterValue, sortColumn, sortOrder } = req.body as {
     fileId?: string;
-    column?: string;
-    order?: "asc" | "desc";
+    filterColumn?: string;
+    filterValue?: string;
+    sortColumn?: string;
+    sortOrder?: "asc" | "desc";
   };
 
-  if (!fileId || !column || !order) {
-    return res.status(400).json({ error: "fileId, column, and order are required." });
+  if (!fileId) {
+    return res.status(400).json({ error: "fileId is required." });
   }
 
   const stored = fileStore.get(fileId);
@@ -91,44 +113,73 @@ app.post("/api/sort", (req: Request, res: Response) => {
 
   try {
     const sheet = stored.workbook.Sheets[stored.sheetName];
-    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
+    let rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
       defval: "",
     });
 
-    if (!(column in rows[0])) {
-      return res.status(400).json({ error: `Column "${column}" does not exist in the sheet.` });
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "The sheet has no data rows." });
     }
 
-    const sorted = [...rows].sort((a, b) => {
-      const valA = a[column];
-      const valB = b[column];
-
-      // Numeric comparison when both values are numbers (or numeric strings)
-      const numA = Number(valA);
-      const numB = Number(valB);
-      const bothNumeric =
-        valA !== "" && valB !== "" && !Number.isNaN(numA) && !Number.isNaN(numB);
-
-      let comparison: number;
-      if (bothNumeric) {
-        comparison = numA - numB;
-      } else {
-        comparison = String(valA).localeCompare(String(valB), undefined, {
-          numeric: true,
-          sensitivity: "base",
+    // --- Filter step (optional) ---
+    if (filterColumn) {
+      if (!(filterColumn in rows[0])) {
+        return res.status(400).json({ error: `Column "${filterColumn}" does not exist in the sheet.` });
+      }
+      if (filterValue === undefined || filterValue === "") {
+        return res.status(400).json({ error: "A filter value is required when filtering by a column." });
+      }
+      rows = rows.filter(
+        (row) => String(row[filterColumn]).trim().toLowerCase() === filterValue.trim().toLowerCase()
+      );
+      if (rows.length === 0) {
+        return res.status(400).json({
+          error: `No rows match "${filterColumn} = ${filterValue}".`,
         });
       }
+    }
 
-      return order === "asc" ? comparison : -comparison;
-    });
+    // --- Sort step (optional) ---
+    if (sortColumn) {
+      if (!(sortColumn in rows[0])) {
+        return res.status(400).json({ error: `Column "${sortColumn}" does not exist in the sheet.` });
+      }
+      const order = sortOrder === "desc" ? "desc" : "asc";
+      rows = [...rows].sort((a, b) => {
+        const valA = a[sortColumn];
+        const valB = b[sortColumn];
 
-    const newSheet = XLSX.utils.json_to_sheet(sorted);
+        const numA = Number(valA);
+        const numB = Number(valB);
+        const bothNumeric =
+          valA !== "" && valB !== "" && !Number.isNaN(numA) && !Number.isNaN(numB);
+
+        let comparison: number;
+        if (bothNumeric) {
+          comparison = numA - numB;
+        } else {
+          comparison = String(valA).localeCompare(String(valB), undefined, {
+            numeric: true,
+            sensitivity: "base",
+          });
+        }
+
+        return order === "asc" ? comparison : -comparison;
+      });
+    }
+
+    const newSheet = XLSX.utils.json_to_sheet(rows);
     const newWorkbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(newWorkbook, newSheet, stored.sheetName);
 
     const outBuffer = XLSX.write(newWorkbook, { type: "buffer", bookType: "xlsx" });
 
-    const downloadName = stored.originalName.replace(/(\.xlsx|\.xls)$/i, "") + "-sorted.xlsx";
+    const suffixParts = [];
+    if (filterColumn) suffixParts.push("filtered");
+    if (sortColumn) suffixParts.push("sorted");
+    const suffix = suffixParts.length ? suffixParts.join("-") : "export";
+
+    const downloadName = stored.originalName.replace(/(\.xlsx|\.xls)$/i, "") + `-${suffix}.xlsx`;
 
     res.setHeader(
       "Content-Type",
@@ -138,7 +189,7 @@ app.post("/api/sort", (req: Request, res: Response) => {
     res.send(outBuffer);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Something went wrong while sorting the file." });
+    res.status(500).json({ error: "Something went wrong while processing the file." });
   }
 });
 
