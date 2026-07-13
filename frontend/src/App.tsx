@@ -5,16 +5,26 @@ type UploadResponse = {
   columns: string[];
   preview: Record<string, unknown>[];
   rowCount: number;
+  uniqueValues: Record<string, string[]>;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api`
   : "/api";
 
+const NONE = "__none__";
+
 export default function App() {
   const [fileInfo, setFileInfo] = useState<UploadResponse | null>(null);
-  const [column, setColumn] = useState<string>("");
-  const [order, setOrder] = useState<"asc" | "desc">("asc");
+
+  // Filter (optional): e.g. Gender = Male
+  const [filterColumn, setFilterColumn] = useState<string>(NONE);
+  const [filterValue, setFilterValue] = useState<string>("");
+
+  // Sort (optional)
+  const [sortColumn, setSortColumn] = useState<string>(NONE);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
   const [status, setStatus] = useState<"idle" | "uploading" | "sorting" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +52,10 @@ export default function App() {
       }
 
       setFileInfo(data);
-      setColumn(data.columns[0]);
+      setFilterColumn(NONE);
+      setFilterValue("");
+      setSortColumn(NONE);
+      setSortOrder("asc");
       setStatus("idle");
     } catch (err) {
       setStatus("error");
@@ -50,17 +63,24 @@ export default function App() {
     }
   }
 
-  async function handleSortAndDownload() {
-    if (!fileInfo || !column) return;
+  async function handleExportAndDownload() {
+    if (!fileInfo) return;
+    if (filterColumn === NONE && sortColumn === NONE) return;
 
     setStatus("sorting");
     setErrorMsg("");
 
     try {
-      const res = await fetch(`${API_BASE}/sort`, {
+      const res = await fetch(`${API_BASE}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: fileInfo.fileId, column, order }),
+        body: JSON.stringify({
+          fileId: fileInfo.fileId,
+          filterColumn: filterColumn === NONE ? undefined : filterColumn,
+          filterValue: filterColumn === NONE ? undefined : filterValue,
+          sortColumn: sortColumn === NONE ? undefined : sortColumn,
+          sortOrder: sortColumn === NONE ? undefined : sortOrder,
+        }),
       });
 
       if (!res.ok) {
@@ -92,8 +112,10 @@ export default function App() {
 
   function handleReset() {
     setFileInfo(null);
-    setColumn("");
-    setOrder("asc");
+    setFilterColumn(NONE);
+    setFilterValue("");
+    setSortColumn(NONE);
+    setSortOrder("asc");
     setStatus("idle");
     setErrorMsg("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -124,24 +146,66 @@ export default function App() {
               {fileInfo.rowCount} rows detected · {fileInfo.columns.length} columns
             </p>
 
-            <label>
-              Sort by column
-              <select value={column} onChange={(e) => setColumn(e.target.value)}>
-                {fileInfo.columns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="section">
+              <h2>Filter (optional)</h2>
+              <p className="meta">Only keep rows where a column equals a specific value — e.g. Gender = Male.</p>
+              <label>
+                Column
+                <select
+                  value={filterColumn}
+                  onChange={(e) => {
+                    setFilterColumn(e.target.value);
+                    setFilterValue("");
+                  }}
+                >
+                  <option value={NONE}>No filter</option>
+                  {Object.keys(fileInfo.uniqueValues).map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <label>
-              Order
-              <select value={order} onChange={(e) => setOrder(e.target.value as "asc" | "desc")}>
-                <option value="asc">Ascending (A→Z, 0→9)</option>
-                <option value="desc">Descending (Z→A, 9→0)</option>
-              </select>
-            </label>
+              {filterColumn !== NONE && (
+                <label>
+                  Value
+                  <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)}>
+                    <option value="">Choose a value…</option>
+                    {(fileInfo.uniqueValues[filterColumn] || []).map((val) => (
+                      <option key={val} value={val}>
+                        {val}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            <div className="section">
+              <h2>Sort (optional)</h2>
+              <label>
+                Column
+                <select value={sortColumn} onChange={(e) => setSortColumn(e.target.value)}>
+                  <option value={NONE}>No sorting</option>
+                  {fileInfo.columns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {sortColumn !== NONE && (
+                <label>
+                  Order
+                  <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}>
+                    <option value="asc">Ascending (A→Z, 0→9)</option>
+                    <option value="desc">Descending (Z→A, 9→0)</option>
+                  </select>
+                </label>
+              )}
+            </div>
 
             <table className="preview">
               <thead>
@@ -164,8 +228,15 @@ export default function App() {
             <p className="meta small">Preview of first {fileInfo.preview.length} rows</p>
 
             <div className="actions">
-              <button onClick={handleSortAndDownload} disabled={status === "sorting"}>
-                {status === "sorting" ? "Sorting…" : "Sort & Download"}
+              <button
+                onClick={handleExportAndDownload}
+                disabled={
+                  status === "sorting" ||
+                  (filterColumn === NONE && sortColumn === NONE) ||
+                  (filterColumn !== NONE && !filterValue)
+                }
+              >
+                {status === "sorting" ? "Processing…" : "Apply & Download"}
               </button>
               <button className="secondary" onClick={handleReset}>
                 Reset
