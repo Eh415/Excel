@@ -38,23 +38,53 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
     return res.status(400).json({ error: "No file uploaded." });
   }
 
+  const startedAt = Date.now();
+
   try {
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
+    const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
       defval: "",
     });
 
-    if (rows.length === 0) {
+    if (rawRows.length === 0) {
       return res.status(400).json({ error: "The uploaded sheet has no data rows." });
     }
 
+    const rowsBefore = rawRows.length;
+
+    // Drop exact duplicate rows (every column value matches another row).
+    const seenRowKeys = new Set<string>();
+    const rows: Record<string, unknown>[] = [];
+    for (const row of rawRows) {
+      const key = JSON.stringify(row);
+      if (seenRowKeys.has(key)) continue;
+      seenRowKeys.add(key);
+      rows.push(row);
+    }
+    const duplicatesRemoved = rowsBefore - rows.length;
+
     const columns = Object.keys(rows[0]);
+
+    // Count blank/null cells across the cleaned data.
+    let nullCells = 0;
+    for (const row of rows) {
+      for (const col of columns) {
+        const val = row[col];
+        if (val === "" || val === null || val === undefined) nullCells++;
+      }
+    }
+
     const fileId = crypto.randomUUID();
 
+    // Store the deduplicated data so export/sort operate on the cleaned set.
+    const cleanedSheet = XLSX.utils.json_to_sheet(rows);
+    const cleanedWorkbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(cleanedWorkbook, cleanedSheet, sheetName);
+
     fileStore.set(fileId, {
-      workbook,
+      workbook: cleanedWorkbook,
       sheetName,
       originalName: req.file.originalname,
       uploadedAt: Date.now(),
@@ -80,9 +110,14 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
 
     res.json({
       fileId,
+      fileName: req.file.originalname,
       columns,
       preview: rows.slice(0, 5),
-      rowCount: rows.length,
+      rowsBefore,
+      rowsAfter: rows.length,
+      duplicatesRemoved,
+      nullCells,
+      runtimeMs: Date.now() - startedAt,
       uniqueValues,
     });
   } catch (err) {
