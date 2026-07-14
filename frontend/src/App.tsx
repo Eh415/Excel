@@ -2,11 +2,60 @@ import { useState, useRef } from "react";
 
 type UploadResponse = {
   fileId: string;
+  fileName: string;
   columns: string[];
   preview: Record<string, unknown>[];
-  rowCount: number;
+  rowsBefore: number;
+  rowsAfter: number;
+  duplicatesRemoved: number;
+  nullCells: number;
+  runtimeMs: number;
   uniqueValues: Record<string, string[]>;
 };
+
+function IconUpload() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4M12 4L7 9M12 4l5 5" />
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function IconFile() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+      <path d="M14 3v5h5" />
+    </svg>
+  );
+}
+
+function IconEye() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconTrash() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+  );
+}
+
+function IconArrowRight() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api`
@@ -27,15 +76,17 @@ export default function App() {
 
   const [status, setStatus] = useState<"idle" | "uploading" | "sorting" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [proceeded, setProceeded] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  async function processFile(file: File) {
     setStatus("uploading");
     setErrorMsg("");
     setFileInfo(null);
+    setProceeded(false);
+    setPreviewOpen(false);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -61,6 +112,21 @@ export default function App() {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
     }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (status === "uploading" || status === "sorting") return;
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    processFile(file);
   }
 
   async function handleExportAndDownload() {
@@ -118,13 +184,15 @@ export default function App() {
     setSortOrder("asc");
     setStatus("idle");
     setErrorMsg("");
+    setProceeded(false);
+    setPreviewOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   // Stepper state, purely presentational
   const step1Done = !!fileInfo;
-  const step2Active = !!fileInfo && filterColumn === NONE && sortColumn === NONE;
-  const step3Active = !!fileInfo && (filterColumn !== NONE || sortColumn !== NONE);
+  const step2Active = !!fileInfo && !proceeded;
+  const step3Active = proceeded;
 
   return (
     <div className="page">
@@ -161,21 +229,47 @@ export default function App() {
           <span className="num">1</span> Upload
         </div>
         <div className={`step ${!fileInfo ? "" : step2Active ? "active" : "done"}`}>
-          <span className="num">2</span> Filter
+          <span className="num">2</span> Review
         </div>
         <div className={`step ${!fileInfo ? "" : step3Active ? "active" : ""}`}>
-          <span className="num">3</span> Sort
+          <span className="num">3</span> Preprocess
         </div>
         <div className="step">
           <span className="num">4</span> Download
         </div>
       </nav>
 
-      <div className="card">
-        <div className="upload-zone">
-          <label className="file-label" htmlFor="file-input">
-            .xlsx or .xls, parsed entirely in memory
-          </label>
+      <div
+        className={`card upload-card ${isDragging ? "dragging" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (status !== "uploading" && status !== "sorting") setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
+        <div
+          className="upload-zone"
+          onClick={() => fileInputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+        >
+          <div className="upload-icon">
+            <IconUpload />
+          </div>
+          <p className="upload-title">Drop a spreadsheet here or browse</p>
+          <p className="meta">Accepts .xlsx and .xls — parsed entirely in memory, nothing is stored server-side</p>
+          <button
+            type="button"
+            className="browse-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+            disabled={status === "uploading" || status === "sorting"}
+          >
+            <IconFile /> Choose file
+          </button>
           <input
             id="file-input"
             ref={fileInputRef}
@@ -183,18 +277,103 @@ export default function App() {
             accept=".xlsx,.xls"
             onChange={handleFileChange}
             disabled={status === "uploading" || status === "sorting"}
+            style={{ display: "none" }}
           />
         </div>
 
         {status === "uploading" && <p className="status">Reading file…</p>}
         {status === "error" && <p className="status error">{errorMsg}</p>}
+      </div>
 
-        {fileInfo && (
+      {fileInfo && (
+        <div className="card dataset-card">
+          <div className="dataset-header">
+            <span className="dataset-title">Uploaded dataset</span>
+          </div>
+          <div className="dataset-row">
+            <div className="dataset-file">
+              <span className="dataset-file-icon">
+                <IconFile />
+              </span>
+              <div>
+                <p className="dataset-name">{fileInfo.fileName}</p>
+                <p className="meta small">{fileInfo.columns.length} columns</p>
+              </div>
+            </div>
+            <div className="dataset-actions">
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setPreviewOpen((v) => !v)}
+                aria-label={previewOpen ? "Hide preview" : "Show preview"}
+              >
+                <IconEye />
+              </button>
+              <button type="button" className="icon-btn danger" onClick={handleReset} aria-label="Remove file">
+                <IconTrash />
+              </button>
+            </div>
+          </div>
+
+          <div className="stats-grid">
+            <div className="stat-card">
+              <span className="stat-label">Rows before</span>
+              <span className="stat-value">{fileInfo.rowsBefore}</span>
+            </div>
+            <div className="stat-card highlight">
+              <span className="stat-label">Rows after</span>
+              <span className="stat-value">{fileInfo.rowsAfter}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Duplicates removed</span>
+              <span className="stat-value">{fileInfo.duplicatesRemoved}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Null / blank cells</span>
+              <span className="stat-value">{fileInfo.nullCells}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Runtime</span>
+              <span className="stat-value">{fileInfo.runtimeMs} ms</span>
+            </div>
+          </div>
+
+          {previewOpen && (
+            <div className="preview-wrap" style={{ marginTop: 16 }}>
+              <table className="preview">
+                <thead>
+                  <tr>
+                    {fileInfo.columns.map((col) => (
+                      <th key={col}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fileInfo.preview.map((row, i) => (
+                    <tr key={i}>
+                      {fileInfo.columns.map((col) => (
+                        <td key={col}>{String(row[col])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!proceeded && (
+            <div className="proceed-row">
+              <button type="button" className="proceed-btn" onClick={() => setProceeded(true)}>
+                Proceed to preprocessing <IconArrowRight />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {fileInfo && proceeded && (
+        <div className="card">
           <div className="controls">
-            <p className="meta">
-              {fileInfo.rowCount} rows · {fileInfo.columns.length} columns
-            </p>
-
             <div className="section">
               <div className="section-head">
                 <h2>Filter</h2>
@@ -266,28 +445,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className="preview-wrap">
-              <table className="preview">
-                <thead>
-                  <tr>
-                    {fileInfo.columns.map((col) => (
-                      <th key={col}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {fileInfo.preview.map((row, i) => (
-                    <tr key={i}>
-                      {fileInfo.columns.map((col) => (
-                        <td key={col}>{String(row[col])}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="meta small">Preview of first {fileInfo.preview.length} rows</p>
-
             <div className="actions">
               <button
                 onClick={handleExportAndDownload}
@@ -304,8 +461,8 @@ export default function App() {
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
