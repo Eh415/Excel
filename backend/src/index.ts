@@ -126,6 +126,56 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
   }
 });
 
+// POST /api/filter-count - body: { fileId, filterColumn, filterValue }
+// Returns how many rows would remain after applying a single column=value filter,
+// without exporting a file. Used right after upload to show "rows after" live.
+app.post("/api/filter-count", (req: Request, res: Response) => {
+  const { fileId, filterColumn, filterValue } = req.body as {
+    fileId?: string;
+    filterColumn?: string;
+    filterValue?: string;
+  };
+
+  if (!fileId) {
+    return res.status(400).json({ error: "fileId is required." });
+  }
+
+  const stored = fileStore.get(fileId);
+  if (!stored) {
+    return res.status(404).json({ error: "File not found or has expired. Please re-upload." });
+  }
+
+  try {
+    const sheet = stored.workbook.Sheets[stored.sheetName];
+    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+    });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "The sheet has no data rows." });
+    }
+
+    if (!filterColumn) {
+      return res.status(400).json({ error: "filterColumn is required." });
+    }
+    if (!(filterColumn in rows[0])) {
+      return res.status(400).json({ error: `Column "${filterColumn}" does not exist in the sheet.` });
+    }
+    if (filterValue === undefined || filterValue === "") {
+      return res.status(400).json({ error: "A filter value is required when filtering by a column." });
+    }
+
+    const matched = rows.filter(
+      (row) => String(row[filterColumn]).trim().toLowerCase() === filterValue.trim().toLowerCase()
+    );
+
+    res.json({ rowCount: matched.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Something went wrong while applying the filter." });
+  }
+});
+
 // POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder? }
 // Filters rows (optional), sorts them (optional), and returns the result as a downloadable .xlsx.
 app.post("/api/export", (req: Request, res: Response) => {
