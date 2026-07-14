@@ -121,14 +121,63 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  // Stepper state, purely presentational
+  const step1Done = !!fileInfo;
+  const step2Active = !!fileInfo && filterColumn === NONE && sortColumn === NONE;
+  const step3Active = !!fileInfo && (filterColumn !== NONE || sortColumn !== NONE);
+
   return (
     <div className="page">
-      <div className="card">
-        <h1>Excel Sorter</h1>
-        <p className="subtitle">Upload a spreadsheet, choose a column, download it sorted.</p>
+      <header className="topbar">
+        <div className="wordmark">
+          <span className="wordmark-mark">
+            <span /><span /><span /><span />
+          </span>
+          Excel Sorter
+        </div>
+        <span className="version-tag">local · v1.0</span>
+      </header>
 
+      <section className="hero">
+        <div>
+          <h1>
+            Rows go in. <em>Order</em> comes out.
+          </h1>
+          <p className="lede">
+            Upload a spreadsheet, filter and sort by any column, and download a clean
+            copy — no formulas, no macros, no waiting on Excel to catch up.
+          </p>
+        </div>
+        <div className="sort-signature" aria-hidden="true">
+          <span className="sig-label">sorting…</span>
+          <div className="sig-bars">
+            <span /><span /><span /><span /><span /><span /><span />
+          </div>
+        </div>
+      </section>
+
+      <nav className="stepper" aria-label="Progress">
+        <div className={`step ${step1Done ? "done" : "active"}`}>
+          <span className="num">1</span> Upload
+        </div>
+        <div className={`step ${!fileInfo ? "" : step2Active ? "active" : "done"}`}>
+          <span className="num">2</span> Filter
+        </div>
+        <div className={`step ${!fileInfo ? "" : step3Active ? "active" : ""}`}>
+          <span className="num">3</span> Sort
+        </div>
+        <div className="step">
+          <span className="num">4</span> Download
+        </div>
+      </nav>
+
+      <div className="card">
         <div className="upload-zone">
+          <label className="file-label" htmlFor="file-input">
+            .xlsx or .xls, parsed entirely in memory
+          </label>
           <input
+            id="file-input"
             ref={fileInputRef}
             type="file"
             accept=".xlsx,.xls"
@@ -143,88 +192,100 @@ export default function App() {
         {fileInfo && (
           <div className="controls">
             <p className="meta">
-              {fileInfo.rowCount} rows detected · {fileInfo.columns.length} columns
+              {fileInfo.rowCount} rows · {fileInfo.columns.length} columns
             </p>
 
             <div className="section">
-              <h2>Filter (optional)</h2>
-              <p className="meta">Only keep rows where a column equals a specific value — e.g. Gender = Male.</p>
-              <label>
-                Column
-                <select
-                  value={filterColumn}
-                  onChange={(e) => {
-                    setFilterColumn(e.target.value);
-                    setFilterValue("");
-                  }}
-                >
-                  <option value={NONE}>No filter</option>
-                  {Object.keys(fileInfo.uniqueValues).map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {filterColumn !== NONE && (
+              <div className="section-head">
+                <h2>Filter</h2>
+                <span className="section-tag">optional</span>
+              </div>
+              <p className="meta">Keep only rows where a column equals a value — e.g. Gender = Male.</p>
+              <div className="field-row">
                 <label>
-                  Value
-                  <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)}>
-                    <option value="">Choose a value…</option>
-                    {(fileInfo.uniqueValues[filterColumn] || []).map((val) => (
-                      <option key={val} value={val}>
-                        {val}
+                  Column
+                  <select
+                    value={filterColumn}
+                    onChange={(e) => {
+                      setFilterColumn(e.target.value);
+                      setFilterValue("");
+                    }}
+                  >
+                    <option value={NONE}>No filter</option>
+                    {Object.keys(fileInfo.uniqueValues).map((col) => (
+                      <option key={col} value={col}>
+                        {col}
                       </option>
                     ))}
                   </select>
                 </label>
-              )}
+
+                {filterColumn !== NONE && (
+                  <label>
+                    Value
+                    <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)}>
+                      <option value="">Choose a value…</option>
+                      {(fileInfo.uniqueValues[filterColumn] || []).map((val) => (
+                        <option key={val} value={val}>
+                          {val}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
             </div>
 
             <div className="section">
-              <h2>Sort (optional)</h2>
-              <label>
-                Column
-                <select value={sortColumn} onChange={(e) => setSortColumn(e.target.value)}>
-                  <option value={NONE}>No sorting</option>
-                  {fileInfo.columns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {sortColumn !== NONE && (
+              <div className="section-head">
+                <h2>Sort</h2>
+                <span className="section-tag">optional</span>
+              </div>
+              <div className="field-row">
                 <label>
-                  Order
-                  <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}>
-                    <option value="asc">Ascending (A→Z, 0→9)</option>
-                    <option value="desc">Descending (Z→A, 9→0)</option>
+                  Column
+                  <select value={sortColumn} onChange={(e) => setSortColumn(e.target.value)}>
+                    <option value={NONE}>No sorting</option>
+                    {fileInfo.columns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
                   </select>
                 </label>
-              )}
+
+                {sortColumn !== NONE && (
+                  <label>
+                    Order
+                    <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}>
+                      <option value="asc">Ascending (A→Z, 0→9)</option>
+                      <option value="desc">Descending (Z→A, 9→0)</option>
+                    </select>
+                  </label>
+                )}
+              </div>
             </div>
 
-            <table className="preview">
-              <thead>
-                <tr>
-                  {fileInfo.columns.map((col) => (
-                    <th key={col}>{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {fileInfo.preview.map((row, i) => (
-                  <tr key={i}>
+            <div className="preview-wrap">
+              <table className="preview">
+                <thead>
+                  <tr>
                     {fileInfo.columns.map((col) => (
-                      <td key={col}>{String(row[col])}</td>
+                      <th key={col}>{col}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {fileInfo.preview.map((row, i) => (
+                    <tr key={i}>
+                      {fileInfo.columns.map((col) => (
+                        <td key={col}>{String(row[col])}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="meta small">Preview of first {fileInfo.preview.length} rows</p>
 
             <div className="actions">
