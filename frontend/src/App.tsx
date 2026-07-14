@@ -81,12 +81,54 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Result of applying the filter right after upload: null until "Apply filter" is clicked.
+  const [filteredCount, setFilteredCount] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"idle" | "checking" | "error">("idle");
+  const [filterError, setFilterError] = useState<string>("");
+
+  async function applyFilter() {
+    if (!fileInfo || filterColumn === NONE || !filterValue) return;
+    setFilterStatus("checking");
+    setFilterError("");
+    try {
+      const res = await fetch(`${API_BASE}/filter-count`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId: fileInfo.fileId,
+          filterColumn,
+          filterValue,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Could not apply filter.");
+      }
+      setFilteredCount(data.rowCount);
+      setFilterStatus("idle");
+    } catch (err) {
+      setFilterStatus("error");
+      setFilterError(err instanceof Error ? err.message : "Could not apply filter.");
+    }
+  }
+
+  function clearFilter() {
+    setFilterColumn(NONE);
+    setFilterValue("");
+    setFilteredCount(null);
+    setFilterStatus("idle");
+    setFilterError("");
+  }
+
   async function processFile(file: File) {
     setStatus("uploading");
     setErrorMsg("");
     setFileInfo(null);
     setProceeded(false);
     setPreviewOpen(false);
+    setFilteredCount(null);
+    setFilterStatus("idle");
+    setFilterError("");
 
     const formData = new FormData();
     formData.append("file", file);
@@ -186,6 +228,9 @@ export default function App() {
     setErrorMsg("");
     setProceeded(false);
     setPreviewOpen(false);
+    setFilteredCount(null);
+    setFilterStatus("idle");
+    setFilterError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -315,6 +360,75 @@ export default function App() {
             </div>
           </div>
 
+          <div className="section" style={{ marginBottom: 16 }}>
+            <div className="section-head">
+              <h2>Filter</h2>
+              <span className="section-tag">optional</span>
+            </div>
+            <p className="meta">Keep only rows where a column equals a value — e.g. Gender = Male.</p>
+            <div className="field-row">
+              <label>
+                Column
+                <select
+                  value={filterColumn}
+                  onChange={(e) => {
+                    setFilterColumn(e.target.value);
+                    setFilterValue("");
+                    setFilteredCount(null);
+                    setFilterError("");
+                  }}
+                >
+                  <option value={NONE}>No filter</option>
+                  {Object.keys(fileInfo.uniqueValues).map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {filterColumn !== NONE && (
+                <label>
+                  Value
+                  <select
+                    value={filterValue}
+                    onChange={(e) => {
+                      setFilterValue(e.target.value);
+                      setFilteredCount(null);
+                      setFilterError("");
+                    }}
+                  >
+                    <option value="">Choose a value…</option>
+                    {(fileInfo.uniqueValues[filterColumn] || []).map((val) => (
+                      <option key={val} value={val}>
+                        {val}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            {filterColumn !== NONE && (
+              <div className="filter-apply-row">
+                <button
+                  type="button"
+                  className="secondary small"
+                  onClick={applyFilter}
+                  disabled={!filterValue || filterStatus === "checking"}
+                >
+                  {filterStatus === "checking" ? "Filtering…" : "Apply filter"}
+                </button>
+                {filteredCount !== null && filterStatus !== "checking" && (
+                  <button type="button" className="secondary small ghost" onClick={clearFilter}>
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
+            {filterStatus === "error" && <p className="status error">{filterError}</p>}
+          </div>
+
           <div className="stats-grid">
             <div className="stat-card">
               <span className="stat-label">Rows before</span>
@@ -322,7 +436,8 @@ export default function App() {
             </div>
             <div className="stat-card highlight">
               <span className="stat-label">Rows after</span>
-              <span className="stat-value">{fileInfo.rowsAfter}</span>
+              <span className="stat-value">{filteredCount !== null ? filteredCount : fileInfo.rowsAfter}</span>
+              {filteredCount !== null && <span className="stat-note">filtered</span>}
             </div>
             <div className="stat-card">
               <span className="stat-label">Duplicates removed</span>
@@ -374,47 +489,11 @@ export default function App() {
       {fileInfo && proceeded && (
         <div className="card">
           <div className="controls">
-            <div className="section">
-              <div className="section-head">
-                <h2>Filter</h2>
-                <span className="section-tag">optional</span>
-              </div>
-              <p className="meta">Keep only rows where a column equals a value — e.g. Gender = Male.</p>
-              <div className="field-row">
-                <label>
-                  Column
-                  <select
-                    value={filterColumn}
-                    onChange={(e) => {
-                      setFilterColumn(e.target.value);
-                      setFilterValue("");
-                    }}
-                  >
-                    <option value={NONE}>No filter</option>
-                    {Object.keys(fileInfo.uniqueValues).map((col) => (
-                      <option key={col} value={col}>
-                        {col}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {filterColumn !== NONE && (
-                  <label>
-                    Value
-                    <select value={filterValue} onChange={(e) => setFilterValue(e.target.value)}>
-                      <option value="">Choose a value…</option>
-                      {(fileInfo.uniqueValues[filterColumn] || []).map((val) => (
-                        <option key={val} value={val}>
-                          {val}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-            </div>
-
+            {filterColumn !== NONE && filterValue && (
+              <p className="meta filter-reminder">
+                Filter active: <strong>{filterColumn} = {filterValue}</strong>
+              </p>
+            )}
             <div className="section">
               <div className="section-head">
                 <h2>Sort</h2>
