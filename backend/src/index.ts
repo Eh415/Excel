@@ -177,15 +177,17 @@ app.post("/api/filter-count", (req: Request, res: Response) => {
   }
 });
 
-// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder? }
-// Filters rows (optional), sorts them (optional), and returns the result as a downloadable .xlsx.
+// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder?, labelColumn? }
+// Filters rows (optional), optionally runs PCA/LDA and appends the results as columns, sorts
+// (optional), and returns the result as a downloadable .xlsx.
 app.post("/api/export", (req: Request, res: Response) => {
-  const { fileId, filterColumn, filterValue, sortColumn, sortOrder } = req.body as {
+  const { fileId, filterColumn, filterValue, sortColumn, sortOrder, labelColumn } = req.body as {
     fileId?: string;
     filterColumn?: string;
     filterValue?: string;
     sortColumn?: string;
     sortOrder?: "asc" | "desc";
+    labelColumn?: string;
   };
 
   if (!fileId) {
@@ -223,6 +225,25 @@ app.post("/api/export", (req: Request, res: Response) => {
           error: `No rows match "${filterColumn} = ${filterValue}".`,
         });
       }
+    }
+
+    // --- Apply Algorithms step (optional) — append PCA/LDA results as new columns ---
+    if (labelColumn) {
+      const columns = Object.keys(rows[0]);
+      const algo = runAlgorithms(rows, columns, labelColumn);
+      const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+      rows = rows.map((row, i) => {
+        const enriched: Record<string, unknown> = { ...row };
+        algo.pca.columnNames.forEach((name, j) => {
+          enriched[name] = round4(algo.pca.scores[i][j]);
+        });
+        algo.lda.columnNames.forEach((name, j) => {
+          const val = j === 0 ? algo.lda.scatter[i].x : algo.lda.scatter[i].y;
+          enriched[name] = round4(val);
+        });
+        return enriched;
+      });
     }
 
     // --- Sort step (optional) ---
@@ -263,6 +284,7 @@ app.post("/api/export", (req: Request, res: Response) => {
     const suffixParts = [];
     if (filterColumn) suffixParts.push("filtered");
     if (sortColumn) suffixParts.push("sorted");
+    if (labelColumn) suffixParts.push("analyzed");
     const suffix = suffixParts.length ? suffixParts.join("-") : "export";
 
     const downloadName = stored.originalName.replace(/(\.xlsx|\.xls)$/i, "") + `-${suffix}.xlsx`;
@@ -274,6 +296,9 @@ app.post("/api/export", (req: Request, res: Response) => {
     res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
     res.send(outBuffer);
   } catch (err) {
+    if (err instanceof AlgorithmError) {
+      return res.status(400).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: "Something went wrong while processing the file." });
   }
