@@ -57,11 +57,175 @@ function IconArrowRight() {
   );
 }
 
+function IconArrowLeft() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+function IconFilterGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5h16l-6 8v5l-4 2v-7L4 5Z" />
+    </svg>
+  );
+}
+
+function IconSortGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 4v16M7 4 3 8M7 4l4 4" />
+      <path d="M17 20V4M17 20l4-4M17 20l-4-4" />
+    </svg>
+  );
+}
+
+function IconCheckCircle() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.5 2.5 2.5 5-5" />
+    </svg>
+  );
+}
+
+type AlgorithmComponent = { label: string; ratio: number };
+type ScatterPoint = { class: string; x: number; y: number };
+type AlgorithmsResponse = {
+  numericColumns: string[];
+  rowsUsed: number;
+  pca: { components: AlgorithmComponent[] };
+  lda: {
+    labelColumn: string;
+    classes: string[];
+    components: AlgorithmComponent[];
+    accuracy: number | null;
+    testSetSize: number;
+    note?: string;
+    scatter: ScatterPoint[];
+  };
+};
+
+const CLASS_COLORS = ["#35604A", "#C4531D", "#3B5D8A", "#7A5FA0", "#B8952E", "#4B7A6B"];
+
+function IconSparkle() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+      <path d="M12 8a4 4 0 0 0 4 4 4 4 0 0 0-4 4 4 4 0 0 0-4-4 4 4 0 0 0 4-4Z" />
+    </svg>
+  );
+}
+
+function IconTarget() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api`
   : "/api";
 
 const NONE = "__none__";
+
+function LdaScatter({
+  scatter,
+  classes,
+  numericColumns,
+  labelColumn,
+  accuracy,
+  ld1Ratio,
+}: {
+  scatter: ScatterPoint[];
+  classes: string[];
+  numericColumns: string[];
+  labelColumn: string;
+  accuracy: number | null;
+  ld1Ratio?: number;
+}) {
+  const width = 560;
+  const height = 300;
+  const pad = 36;
+
+  const xs = scatter.map((p) => p.x);
+  const ys = scatter.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const yRange = Math.max(...ys) - Math.min(...ys);
+  const minY = yRange < 1e-6 ? -1 : Math.min(...ys);
+  const maxY = yRange < 1e-6 ? 1 : Math.max(...ys);
+
+  const xSpan = maxX - minX || 1;
+  const ySpan = maxY - minY || 1;
+
+  const toSvgX = (x: number) => pad + ((x - minX) / xSpan) * (width - pad * 2);
+  const toSvgY = (y: number) => height - pad - ((y - minY) / ySpan) * (height - pad * 2);
+
+  const colorFor = (cls: string) => CLASS_COLORS[classes.indexOf(cls) % CLASS_COLORS.length];
+
+  return (
+    <div className="analysis-panel">
+      <p className="meta">
+        Using <strong>{numericColumns.join(", ")}</strong>, LDA separates {classes.length} classes of{" "}
+        <strong>{labelColumn}</strong>
+        {accuracy !== null ? <> with {accuracy.toFixed(1)}% held-out accuracy</> : null}
+        {ld1Ratio !== undefined ? (
+          <>
+            . LD1 alone captures {ld1Ratio.toFixed(1)}% of the between-class separation
+          </>
+        ) : null}
+        .
+      </p>
+
+      <div className="scatter-wrap">
+        <svg viewBox={`0 0 ${width} ${height}`} className="scatter-svg">
+          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} className="scatter-axis" />
+          <line x1={pad} y1={pad} x2={pad} y2={height - pad} className="scatter-axis" />
+          <text x={width / 2} y={height - 8} className="scatter-axis-label" textAnchor="middle">
+            LD1
+          </text>
+          <text
+            x={-height / 2}
+            y={14}
+            className="scatter-axis-label"
+            textAnchor="middle"
+            transform="rotate(-90)"
+          >
+            LD2
+          </text>
+          {scatter.map((p, i) => (
+            <circle
+              key={i}
+              cx={toSvgX(p.x)}
+              cy={toSvgY(p.y)}
+              r={4}
+              fill={colorFor(p.class)}
+              fillOpacity={0.75}
+              stroke="#fff"
+              strokeWidth={0.5}
+            />
+          ))}
+        </svg>
+      </div>
+
+      <div className="scatter-legend">
+        {classes.map((c) => (
+          <span className="legend-item" key={c}>
+            <span className="legend-swatch" style={{ background: colorFor(c) }} />
+            {c}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [fileInfo, setFileInfo] = useState<UploadResponse | null>(null);
@@ -120,6 +284,52 @@ export default function App() {
     setFilterError("");
   }
 
+  // Apply Algorithms (PCA + LDA), run after preprocessing.
+  const [algoOpen, setAlgoOpen] = useState(false);
+  const [labelColumn, setLabelColumn] = useState<string>(NONE);
+  const [algoStatus, setAlgoStatus] = useState<"idle" | "running" | "error">("idle");
+  const [algoError, setAlgoError] = useState<string>("");
+  const [algoResult, setAlgoResult] = useState<AlgorithmsResponse | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+
+  async function runAlgorithmsRequest() {
+    if (!fileInfo || labelColumn === NONE) return;
+    setAlgoStatus("running");
+    setAlgoError("");
+    setAlgoResult(null);
+    setAnalysisOpen(false);
+    try {
+      const res = await fetch(`${API_BASE}/apply-algorithms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId: fileInfo.fileId,
+          labelColumn,
+          filterColumn: filterColumn === NONE ? undefined : filterColumn,
+          filterValue: filterColumn === NONE ? undefined : filterValue,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Could not run algorithms.");
+      }
+      setAlgoResult(data);
+      setAlgoStatus("idle");
+    } catch (err) {
+      setAlgoStatus("error");
+      setAlgoError(err instanceof Error ? err.message : "Could not run algorithms.");
+    }
+  }
+
+  function resetAlgorithms() {
+    setAlgoOpen(false);
+    setLabelColumn(NONE);
+    setAlgoStatus("idle");
+    setAlgoError("");
+    setAlgoResult(null);
+    setAnalysisOpen(false);
+  }
+
   async function processFile(file: File) {
     setStatus("uploading");
     setErrorMsg("");
@@ -129,6 +339,7 @@ export default function App() {
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
+    resetAlgorithms();
 
     const formData = new FormData();
     formData.append("file", file);
@@ -231,13 +442,15 @@ export default function App() {
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
+    resetAlgorithms();
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   // Stepper state, purely presentational
   const step1Done = !!fileInfo;
   const step2Active = !!fileInfo && !proceeded;
-  const step3Active = proceeded;
+  const step3Active = proceeded && !algoOpen;
+  const step4Active = algoOpen;
 
   return (
     <div className="page">
@@ -276,11 +489,14 @@ export default function App() {
         <div className={`step ${!fileInfo ? "" : step2Active ? "active" : "done"}`}>
           <span className="num">2</span> Review
         </div>
-        <div className={`step ${!fileInfo ? "" : step3Active ? "active" : ""}`}>
+        <div className={`step ${!fileInfo ? "" : step3Active ? "active" : proceeded ? "done" : ""}`}>
           <span className="num">3</span> Preprocess
         </div>
+        <div className={`step ${step4Active ? "active" : algoResult ? "done" : ""}`}>
+          <span className="num">4</span> Algorithms
+        </div>
         <div className="step">
-          <span className="num">4</span> Download
+          <span className="num">5</span> Download
         </div>
       </nav>
 
@@ -376,6 +592,7 @@ export default function App() {
                     setFilterValue("");
                     setFilteredCount(null);
                     setFilterError("");
+                    resetAlgorithms();
                   }}
                 >
                   <option value={NONE}>No filter</option>
@@ -535,11 +752,171 @@ export default function App() {
               >
                 {status === "sorting" ? "Processing…" : "Apply & Download"}
               </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setAlgoOpen(true)}
+                disabled={algoOpen}
+              >
+                Apply Algorithms
+              </button>
               <button className="secondary" onClick={handleReset}>
                 Reset
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {fileInfo && proceeded && algoOpen && (
+        <div className="card algo-card">
+          <div className="algo-header">
+            <span className="algo-header-icon">
+              <IconSparkle />
+            </span>
+            <div>
+              <h2 className="algo-title">Apply Algorithms</h2>
+              <p className="meta">Run PCA and LDA dimensionality reduction on the numeric columns.</p>
+            </div>
+          </div>
+
+          {!algoResult && (
+            <div className="section" style={{ marginTop: 4 }}>
+              <div className="field-row">
+                <label>
+                  Class / label column (for LDA)
+                  <select
+                    value={labelColumn}
+                    onChange={(e) => {
+                      setLabelColumn(e.target.value);
+                      setAlgoResult(null);
+                      setAlgoStatus("idle");
+                      setAlgoError("");
+                    }}
+                  >
+                    <option value={NONE}>Choose a column…</option>
+                    {Object.keys(fileInfo.uniqueValues)
+                      .filter((col) => col !== filterColumn || filterColumn === NONE)
+                      .map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
+              <p className="meta small">
+                PCA runs unsupervised on all numeric columns. LDA additionally uses this column as the class label.
+              </p>
+              <div className="filter-apply-row">
+                <button
+                  type="button"
+                  onClick={runAlgorithmsRequest}
+                  disabled={labelColumn === NONE || algoStatus === "running"}
+                >
+                  {algoStatus === "running" ? "Running…" : "Run Algorithms"}
+                </button>
+                <button type="button" className="secondary small ghost" onClick={resetAlgorithms}>
+                  Cancel
+                </button>
+              </div>
+              {algoStatus === "error" && <p className="status error">{algoError}</p>}
+            </div>
+          )}
+
+          {algoResult && (
+            <>
+              <div className="algo-grid">
+                <div className="algo-result-card">
+                  <div className="algo-result-head">
+                    <span className="algo-icon pine">
+                      <IconSparkle />
+                    </span>
+                    <div>
+                      <p className="algo-result-title">PCA</p>
+                      <p className="algo-result-subtitle">Principal Component Analysis</p>
+                    </div>
+                  </div>
+                  <p className="meta">Unsupervised linear transformation to maximize variance retention.</p>
+                  <span className="algo-status-badge done">
+                    <IconCheckCircle /> Completed
+                  </span>
+                  <div className="algo-bars">
+                    {algoResult.pca.components.map((c) => (
+                      <div className="algo-bar-row" key={c.label}>
+                        <span className="algo-bar-label">{c.label}</span>
+                        <span className="algo-bar-track">
+                          <span className="algo-bar-fill" style={{ width: `${Math.min(c.ratio, 100)}%` }} />
+                        </span>
+                        <span className="algo-bar-value">{c.ratio.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="algo-result-card">
+                  <div className="algo-result-head">
+                    <span className="algo-icon clay">
+                      <IconTarget />
+                    </span>
+                    <div>
+                      <p className="algo-result-title">LDA</p>
+                      <p className="algo-result-subtitle">Linear Discriminant Analysis</p>
+                    </div>
+                  </div>
+                  <p className="meta">
+                    Supervised method to maximize separability of <strong>{algoResult.lda.labelColumn}</strong>.
+                  </p>
+                  <span className="algo-status-badge done">
+                    <IconCheckCircle /> Completed
+                  </span>
+                  <div className="algo-bars">
+                    {algoResult.lda.accuracy !== null && (
+                      <div className="algo-bar-row accuracy">
+                        <span className="algo-bar-label">Accuracy</span>
+                        <span className="algo-bar-track" />
+                        <span className="algo-bar-value">{algoResult.lda.accuracy.toFixed(1)}%</span>
+                      </div>
+                    )}
+                    {algoResult.lda.components.map((c) => (
+                      <div className="algo-bar-row" key={c.label}>
+                        <span className="algo-bar-label">{c.label}</span>
+                        <span className="algo-bar-track">
+                          <span className="algo-bar-fill clay" style={{ width: `${Math.min(c.ratio, 100)}%` }} />
+                        </span>
+                        <span className="algo-bar-value">{c.ratio.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  {algoResult.lda.note && <p className="meta small algo-note">{algoResult.lda.note}</p>}
+                </div>
+              </div>
+
+              <div className="algo-banner">
+                <IconCheckCircle /> Both algorithms completed successfully — ready for analysis.
+              </div>
+
+              <div className="algo-actions">
+                <button type="button" className="secondary" onClick={resetAlgorithms}>
+                  <IconArrowLeft /> Back
+                </button>
+                <button type="button" className="proceed-btn" onClick={() => setAnalysisOpen((v) => !v)}>
+                  {analysisOpen ? "Hide Analysis" : "View Analysis"} <IconArrowRight />
+                </button>
+              </div>
+
+              {analysisOpen && (
+                <LdaScatter
+                  scatter={algoResult.lda.scatter}
+                  classes={algoResult.lda.classes}
+                  numericColumns={algoResult.numericColumns}
+                  labelColumn={algoResult.lda.labelColumn}
+                  accuracy={algoResult.lda.accuracy}
+                  ld1Ratio={algoResult.lda.components[0]?.ratio}
+                />
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
