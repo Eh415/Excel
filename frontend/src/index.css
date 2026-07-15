@@ -424,6 +424,19 @@ input[type="file"] {
   color: var(--pine-dark);
 }
 
+.download-lock-note {
+  background: #f9f4ea;
+  border: 1px solid var(--clay);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--ink);
+  margin-bottom: 14px;
+}
+
+.download-lock-note strong {
+  color: var(--clay);
+}
+
 .filter-apply-row {
   display: flex;
   align-items: center;
