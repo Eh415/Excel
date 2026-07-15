@@ -3,6 +3,7 @@ import cors from "cors";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import crypto from "crypto";
+import { runAlgorithms, AlgorithmError } from "./algorithms";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -275,6 +276,67 @@ app.post("/api/export", (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Something went wrong while processing the file." });
+  }
+});
+
+// POST /api/apply-algorithms - body: { fileId, labelColumn, filterColumn?, filterValue? }
+// Runs PCA (unsupervised) and LDA (supervised, needs labelColumn) on the numeric columns.
+// If filterColumn/filterValue are provided, algorithms run on that filtered subset — matching
+// whatever filter was applied earlier in the pipeline.
+app.post("/api/apply-algorithms", (req: Request, res: Response) => {
+  const { fileId, labelColumn, filterColumn, filterValue } = req.body as {
+    fileId?: string;
+    labelColumn?: string;
+    filterColumn?: string;
+    filterValue?: string;
+  };
+
+  if (!fileId) {
+    return res.status(400).json({ error: "fileId is required." });
+  }
+  if (!labelColumn) {
+    return res.status(400).json({ error: "labelColumn is required for LDA." });
+  }
+
+  const stored = fileStore.get(fileId);
+  if (!stored) {
+    return res.status(404).json({ error: "File not found or has expired. Please re-upload." });
+  }
+
+  try {
+    const sheet = stored.workbook.Sheets[stored.sheetName];
+    let rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+    });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "The sheet has no data rows." });
+    }
+
+    if (filterColumn) {
+      if (!(filterColumn in rows[0])) {
+        return res.status(400).json({ error: `Column "${filterColumn}" does not exist in the sheet.` });
+      }
+      if (filterValue === undefined || filterValue === "") {
+        return res.status(400).json({ error: "A filter value is required when filtering by a column." });
+      }
+      rows = rows.filter(
+        (row) => String(row[filterColumn]).trim().toLowerCase() === filterValue.trim().toLowerCase()
+      );
+      if (rows.length === 0) {
+        return res.status(400).json({ error: `No rows match "${filterColumn} = ${filterValue}".` });
+      }
+    }
+
+    const columns = Object.keys(rows[0]);
+    const result = runAlgorithms(rows, columns, labelColumn);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof AlgorithmError) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: "Something went wrong while running the algorithms." });
   }
 });
 
