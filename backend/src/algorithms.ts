@@ -17,6 +17,8 @@ export type AlgorithmsResult = {
   rowsUsed: number;
   pca: {
     components: AlgorithmComponent[];
+    columnNames: string[]; // e.g. ["PC1", "PC2"] — collision-safe against existing sheet columns
+    scores: number[][]; // one entry per row, aligned to columnNames
   };
   lda: {
     labelColumn: string;
@@ -25,9 +27,28 @@ export type AlgorithmsResult = {
     accuracy: number | null; // percentage, 0-100, or null if it couldn't be evaluated
     testSetSize: number;
     note?: string;
+    columnNames: string[]; // e.g. ["LD1", "LD2"] — collision-safe against existing sheet columns
     scatter: ScatterPoint[]; // rows projected onto LD1/LD2 (LD2 = 0 if only one component exists)
   };
 };
+
+// Picks column names like "PC1"/"PC2" for the new algorithm-output columns, avoiding collisions
+// with columns already in the sheet (e.g. if the user's data already has a "PC1" column).
+function pickColumnNames(prefix: string, count: number, existingColumns: string[]): string[] {
+  const existing = new Set(existingColumns);
+  const names: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    let base = `${prefix}${i}`;
+    let candidate = base;
+    let suffix = 2;
+    while (existing.has(candidate) || names.includes(candidate)) {
+      candidate = `${base}_${suffix}`;
+      suffix++;
+    }
+    names.push(candidate);
+  }
+  return names;
+}
 
 export class AlgorithmError extends Error {}
 
@@ -94,11 +115,23 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return copy;
 }
 
-function runPCA(matrixRows: number[][]): AlgorithmComponent[] {
+function runPCA(matrixRows: number[][]): { components: AlgorithmComponent[]; scores: number[][] } {
   const pca = new PCA(matrixRows, { center: true, scale: true });
   const variance = pca.getExplainedVariance();
-  const top = variance.slice(0, Math.min(2, variance.length));
-  return top.map((v, i) => ({ label: `PC${i + 1}`, ratio: v * 100 }));
+  const numComponents = Math.min(2, variance.length);
+  const components = variance
+    .slice(0, numComponents)
+    .map((v, i) => ({ label: `PC${i + 1}`, ratio: v * 100 }));
+
+  const projected = pca.predict(matrixRows, { nComponents: numComponents });
+  const scores: number[][] = [];
+  for (let i = 0; i < matrixRows.length; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < numComponents; j++) row.push(projected.get(i, j));
+    scores.push(row);
+  }
+
+  return { components, scores };
 }
 
 type FittedLDA = {
@@ -260,13 +293,24 @@ export function runAlgorithms(
   const matrix = toMatrix(rows, numericColumns);
   const labels = rows.map((r) => String(r[labelColumn]));
 
-  const pcaComponents = runPCA(matrix);
+  const pcaResult = runPCA(matrix);
   const ldaResult = runLDA(matrix, labels);
+
+  const pcaColumnNames = pickColumnNames("PC", pcaResult.components.length, columns);
+  const ldaColumnNames = pickColumnNames(
+    "LD",
+    ldaResult.components.length,
+    columns.concat(pcaColumnNames)
+  );
 
   return {
     numericColumns,
     rowsUsed: rows.length,
-    pca: { components: pcaComponents },
+    pca: {
+      components: pcaResult.components,
+      columnNames: pcaColumnNames,
+      scores: pcaResult.scores,
+    },
     lda: {
       labelColumn,
       classes: ldaResult.classes,
@@ -274,6 +318,7 @@ export function runAlgorithms(
       accuracy: ldaResult.accuracy,
       testSetSize: ldaResult.testSetSize,
       note: ldaResult.note,
+      columnNames: ldaColumnNames,
       scatter: ldaResult.scatter,
     },
   };
