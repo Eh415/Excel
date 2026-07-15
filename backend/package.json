@@ -10,6 +10,8 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "ml-matrix": "^6.14.0",
+    "ml-pca": "^4.1.1",
     "multer": "^1.4.5-lts.1",
     "xlsx": "^0.18.5"
   },
