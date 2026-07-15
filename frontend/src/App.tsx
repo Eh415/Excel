@@ -292,6 +292,7 @@ export default function App() {
   const [algoError, setAlgoError] = useState<string>("");
   const [algoResult, setAlgoResult] = useState<AlgorithmsResponse | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
 
   async function runAlgorithmsRequest() {
     if (!fileInfo || labelColumn === NONE) return;
@@ -334,6 +335,7 @@ export default function App() {
     }
     setAlgoResult(null);
     setAnalysisOpen(false);
+    setDownloaded(false);
   }
 
   async function processFile(file: File) {
@@ -345,6 +347,7 @@ export default function App() {
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
+    setDownloaded(false);
     resetAlgorithms();
 
     const formData = new FormData();
@@ -430,6 +433,7 @@ export default function App() {
       window.URL.revokeObjectURL(url);
 
       setStatus("idle");
+      setDownloaded(true);
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Sorting failed.");
@@ -453,11 +457,42 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  // Stepper state, purely presentational
-  const step1Done = !!fileInfo;
-  const step2Active = !!fileInfo && !proceeded;
-  const step3Active = proceeded && !algoOpen;
-  const step4Active = algoOpen;
+  // Sidebar progress state, purely presentational
+  type StepStatus = "done" | "active" | "upcoming";
+  const steps: { n: number; label: string; status: StepStatus }[] = [
+    { n: 1, label: "Upload", status: fileInfo ? "done" : "active" },
+    {
+      n: 2,
+      label: "Review",
+      status: !fileInfo ? "upcoming" : proceeded ? "done" : "active",
+    },
+    {
+      n: 3,
+      label: "Preprocess",
+      status: !proceeded ? "upcoming" : algoOpen || algoResult ? "done" : "active",
+    },
+    {
+      n: 4,
+      label: "Algorithms",
+      status: !proceeded ? "upcoming" : algoResult ? "done" : algoOpen ? "active" : "upcoming",
+    },
+    {
+      n: 5,
+      label: "Download",
+      status: !algoResult ? "upcoming" : downloaded ? "done" : "active",
+    },
+  ];
+
+  function nextStepHint(): string {
+    if (!fileInfo) return "Upload a spreadsheet to get started.";
+    if (!proceeded) return "Review the file below. Filtering is optional — click Proceed to preprocessing when ready.";
+    if (!algoOpen && !algoResult)
+      return "Choose a sort order if you'd like, then click Apply Algorithms — it's required before you can download.";
+    if (algoOpen && !algoResult) return "Pick a class/label column for LDA, then click Run Algorithms.";
+    if (algoResult && !downloaded)
+      return "You're ready — click Apply & Download to get your file with PC1/PC2/LD1/LD2 included.";
+    return "Done! Upload another file to start over, or download again anytime.";
+  }
 
   return (
     <div className="page">
@@ -489,23 +524,34 @@ export default function App() {
         </div>
       </section>
 
-      <nav className="stepper" aria-label="Progress">
-        <div className={`step ${step1Done ? "done" : "active"}`}>
-          <span className="num">1</span> Upload
-        </div>
-        <div className={`step ${!fileInfo ? "" : step2Active ? "active" : "done"}`}>
-          <span className="num">2</span> Review
-        </div>
-        <div className={`step ${!fileInfo ? "" : step3Active ? "active" : proceeded ? "done" : ""}`}>
-          <span className="num">3</span> Preprocess
-        </div>
-        <div className={`step ${step4Active ? "active" : algoResult ? "done" : ""}`}>
-          <span className="num">4</span> Algorithms
-        </div>
-        <div className="step">
-          <span className="num">5</span> Download
-        </div>
-      </nav>
+      <div className="workspace">
+        <aside className="sidebar" aria-label="Progress">
+          <p className="sidebar-title">Process</p>
+          <ol className="sidebar-steps">
+            {steps.map((s) => (
+              <li key={s.n} className={`sidebar-step ${s.status}`}>
+                <span className="sidebar-step-marker">
+                  {s.status === "done" ? <IconCheckCircle /> : s.n}
+                </span>
+                <span className="sidebar-step-label">{s.label}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="sidebar-next">
+            <p className="sidebar-next-label">What's next</p>
+            <p className="sidebar-next-text">{nextStepHint()}</p>
+          </div>
+        </aside>
+
+        <nav className="stepper-mobile" aria-label="Progress">
+          {steps.map((s) => (
+            <div key={s.n} className={`step ${s.status === "active" ? "active" : s.status === "done" ? "done" : ""}`}>
+              <span className="num">{s.n}</span> {s.label}
+            </div>
+          ))}
+        </nav>
+
+        <div className="main-content">
 
       <div
         className={`card upload-card ${isDragging ? "dragging" : ""}`}
@@ -941,6 +987,8 @@ export default function App() {
           )}
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }
