@@ -4,6 +4,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import crypto from "crypto";
 import { runAlgorithms, AlgorithmError } from "./algorithms";
+import { smartImport } from "./smart-import";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -45,9 +46,9 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
-      defval: "",
-    });
+
+    const imported = smartImport(sheet);
+    const rawRows = imported.rows;
 
     if (rawRows.length === 0) {
       return res.status(400).json({ error: "The uploaded sheet has no data rows." });
@@ -66,7 +67,7 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
     }
     const duplicatesRemoved = rowsBefore - rows.length;
 
-    const columns = Object.keys(rows[0]);
+    const columns = imported.columns;
 
     // Count blank/null cells across the cleaned data.
     let nullCells = 0;
@@ -80,7 +81,7 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
     const fileId = crypto.randomUUID();
 
     // Store the deduplicated data so export/sort operate on the cleaned set.
-    const cleanedSheet = XLSX.utils.json_to_sheet(rows);
+    const cleanedSheet = XLSX.utils.json_to_sheet(rows, { header: columns });
     const cleanedWorkbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(cleanedWorkbook, cleanedSheet, sheetName);
 
@@ -109,6 +110,14 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
       }
     }
 
+    const importNotes = {
+      headerRowsSkipped: imported.headerRowsSkipped,
+      columnsRealigned: imported.columnsRealigned,
+      groupsDetected: imported.groupsDetected,
+      dividerRowsRemoved: imported.dividerRowsRemoved,
+      subtotalRowsRemoved: imported.subtotalRowsRemoved,
+    };
+
     res.json({
       fileId,
       fileName: req.file.originalname,
@@ -120,6 +129,7 @@ app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => 
       nullCells,
       runtimeMs: Date.now() - startedAt,
       uniqueValues,
+      importNotes,
     });
   } catch (err) {
     console.error(err);
@@ -177,17 +187,17 @@ app.post("/api/filter-count", (req: Request, res: Response) => {
   }
 });
 
-// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder?, labelColumn? }
-// Filters rows (optional), optionally runs PCA/LDA and appends the results as columns, sorts
-// (optional), and returns the result as a downloadable .xlsx.
+// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder? }
+// Filters rows (optional), sorts them (optional), and returns the result as a downloadable .xlsx.
+// Note: this does NOT include PCA/LDA output columns — Apply Algorithms is a separate analysis
+// step (see /api/apply-algorithms) and does not modify the exported spreadsheet's contents.
 app.post("/api/export", (req: Request, res: Response) => {
-  const { fileId, filterColumn, filterValue, sortColumn, sortOrder, labelColumn } = req.body as {
+  const { fileId, filterColumn, filterValue, sortColumn, sortOrder } = req.body as {
     fileId?: string;
     filterColumn?: string;
     filterValue?: string;
     sortColumn?: string;
     sortOrder?: "asc" | "desc";
-    labelColumn?: string;
   };
 
   if (!fileId) {
@@ -225,25 +235,6 @@ app.post("/api/export", (req: Request, res: Response) => {
           error: `No rows match "${filterColumn} = ${filterValue}".`,
         });
       }
-    }
-
-    // --- Apply Algorithms step (optional) — append PCA/LDA results as new columns ---
-    if (labelColumn) {
-      const columns = Object.keys(rows[0]);
-      const algo = runAlgorithms(rows, columns, labelColumn);
-      const round4 = (n: number) => Math.round(n * 10000) / 10000;
-
-      rows = rows.map((row, i) => {
-        const enriched: Record<string, unknown> = { ...row };
-        algo.pca.columnNames.forEach((name, j) => {
-          enriched[name] = round4(algo.pca.scores[i][j]);
-        });
-        algo.lda.columnNames.forEach((name, j) => {
-          const val = j === 0 ? algo.lda.scatter[i].x : algo.lda.scatter[i].y;
-          enriched[name] = round4(val);
-        });
-        return enriched;
-      });
     }
 
     // --- Sort step (optional) ---
@@ -284,7 +275,6 @@ app.post("/api/export", (req: Request, res: Response) => {
     const suffixParts = [];
     if (filterColumn) suffixParts.push("filtered");
     if (sortColumn) suffixParts.push("sorted");
-    if (labelColumn) suffixParts.push("analyzed");
     const suffix = suffixParts.length ? suffixParts.join("-") : "export";
 
     const downloadName = stored.originalName.replace(/(\.xlsx|\.xls)$/i, "") + `-${suffix}.xlsx`;
@@ -296,9 +286,6 @@ app.post("/api/export", (req: Request, res: Response) => {
     res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
     res.send(outBuffer);
   } catch (err) {
-    if (err instanceof AlgorithmError) {
-      return res.status(400).json({ error: err.message });
-    }
     console.error(err);
     res.status(500).json({ error: "Something went wrong while processing the file." });
   }
