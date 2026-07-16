@@ -550,17 +550,57 @@ input[type="file"] {
   color: var(--pine-dark);
 }
 
-.download-lock-note {
-  background: #f9f4ea;
-  border: 1px solid var(--clay);
+.preprocess-next-note {
+  background: #f2f7f4;
+  border: 1px solid var(--pine);
   border-radius: 6px;
   padding: 8px 12px;
   color: var(--ink);
   margin-bottom: 14px;
 }
 
-.download-lock-note strong {
-  color: var(--clay);
+.preprocess-next-note strong {
+  color: var(--pine-dark);
+}
+
+/* ---------- Download (final step) ---------- */
+
+.download-card {
+  margin-top: 16px;
+  border-color: var(--pine);
+}
+
+.download-summary {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.download-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+}
+
+.download-summary li:not(:last-child) {
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.download-summary-key {
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.download-summary-val {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  text-align: right;
+  word-break: break-word;
 }
 
 .filter-apply-row {
