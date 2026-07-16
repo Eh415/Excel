@@ -57,6 +57,15 @@ function IconArrowRight() {
   );
 }
 
+function IconDownload() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4v12M12 16l-5-5M12 16l5-5" />
+      <path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1" />
+    </svg>
+  );
+}
+
 function IconArrowLeft() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -803,29 +812,12 @@ export default function App() {
               </div>
             </div>
 
-            {!algoResult && (
-              <p className="meta small download-lock-note">
-                Run <strong>Apply Algorithms</strong> below first — the download will include PC1/PC2 (PCA) and LD1/LD2 (LDA) columns.
-              </p>
-            )}
+            <p className="meta small preprocess-next-note">
+              Next: run <strong>Apply Algorithms</strong> — download becomes available once results are ready.
+            </p>
 
             <div className="actions">
-              <button
-                onClick={handleExportAndDownload}
-                disabled={
-                  status === "sorting" ||
-                  !algoResult ||
-                  (filterColumn !== NONE && !filterValue)
-                }
-              >
-                {status === "sorting" ? "Processing…" : "Apply & Download"}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setAlgoOpen(true)}
-                disabled={algoOpen}
-              >
+              <button type="button" onClick={() => setAlgoOpen(true)} disabled={algoOpen}>
                 {algoResult ? "Re-run Algorithms" : "Apply Algorithms"}
               </button>
               <button className="secondary" onClick={handleReset}>
@@ -985,6 +977,55 @@ export default function App() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {fileInfo && algoResult && (
+        <div className="card download-card">
+          <div className="algo-header">
+            <span className="algo-header-icon">
+              <IconDownload />
+            </span>
+            <div>
+              <h2 className="algo-title">Download</h2>
+              <p className="meta">Your file is ready, with everything below applied.</p>
+            </div>
+          </div>
+
+          <ul className="download-summary">
+            <li>
+              <span className="download-summary-key">Filter</span>
+              <span className="download-summary-val">
+                {filterColumn !== NONE && filterValue ? `${filterColumn} = ${filterValue}` : "None"}
+              </span>
+            </li>
+            <li>
+              <span className="download-summary-key">Sort</span>
+              <span className="download-summary-val">
+                {sortColumn !== NONE ? `${sortColumn}, ${sortOrder === "asc" ? "ascending" : "descending"}` : "None"}
+              </span>
+            </li>
+            <li>
+              <span className="download-summary-key">Algorithm columns</span>
+              <span className="download-summary-val">
+                {[...algoResult.pca.columnNames, ...algoResult.lda.columnNames].join(", ")}
+              </span>
+            </li>
+          </ul>
+
+          {status === "error" && <p className="status error">{errorMsg}</p>}
+
+          <div className="actions">
+            <button
+              onClick={handleExportAndDownload}
+              disabled={status === "sorting" || (filterColumn !== NONE && !filterValue)}
+            >
+              {status === "sorting" ? "Processing…" : downloaded ? "Download Again" : "Apply & Download"}
+            </button>
+            <button type="button" className="secondary" onClick={handleReset}>
+              Start Over
+            </button>
+          </div>
         </div>
       )}
         </div>
