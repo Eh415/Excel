@@ -1,5 +1,13 @@
 import { useState, useRef } from "react";
 
+type ImportNotes = {
+  headerRowsSkipped: number;
+  columnsRealigned: { label: string; fromCol: number; toCol: number }[];
+  groupsDetected: string[];
+  dividerRowsRemoved: number;
+  subtotalRowsRemoved: number;
+};
+
 type UploadResponse = {
   fileId: string;
   fileName: string;
@@ -11,6 +19,7 @@ type UploadResponse = {
   nullCells: number;
   runtimeMs: number;
   uniqueValues: Record<string, string[]>;
+  importNotes: ImportNotes;
 };
 
 function IconUpload() {
@@ -417,7 +426,6 @@ export default function App() {
           filterValue: filterColumn === NONE ? undefined : filterValue,
           sortColumn: sortColumn === NONE ? undefined : sortColumn,
           sortOrder: sortColumn === NONE ? undefined : sortOrder,
-          labelColumn: algoResult.lda.labelColumn,
         }),
       });
 
@@ -499,7 +507,7 @@ export default function App() {
       return "Choose a sort order if you'd like, then click Apply Algorithms — it's required before you can download.";
     if (algoOpen && !algoResult) return "Pick a class/label column for LDA, then click Run Algorithms.";
     if (algoResult && !downloaded)
-      return "You're ready — click Apply & Download to get your file with PC1/PC2/LD1/LD2 included.";
+      return "You're ready — click Apply & Download to get your file.";
     return "Done! Upload another file to start over, or download again anytime.";
   }
 
@@ -637,6 +645,42 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          {(fileInfo.importNotes.headerRowsSkipped > 0 ||
+            fileInfo.importNotes.columnsRealigned.length > 0 ||
+            fileInfo.importNotes.dividerRowsRemoved > 0 ||
+            fileInfo.importNotes.subtotalRowsRemoved > 0) && (
+            <div className="import-notes">
+              <span className="import-notes-icon">
+                <IconSparkle />
+              </span>
+              <div>
+                <p className="import-notes-title">Smart import cleaned this file</p>
+                <p className="import-notes-text">
+                  {fileInfo.importNotes.headerRowsSkipped > 0 && (
+                    <>Skipped {fileInfo.importNotes.headerRowsSkipped} title/header row(s) before the real data. </>
+                  )}
+                  {fileInfo.importNotes.columnsRealigned.length > 0 && (
+                    <>
+                      Corrected {fileInfo.importNotes.columnsRealigned.length} misaligned column
+                      {fileInfo.importNotes.columnsRealigned.length > 1 ? "s" : ""} (
+                      {fileInfo.importNotes.columnsRealigned.map((c) => c.label).join(", ")}).{" "}
+                    </>
+                  )}
+                  {fileInfo.importNotes.dividerRowsRemoved > 0 && (
+                    <>
+                      Found {fileInfo.importNotes.groupsDetected.length} section
+                      {fileInfo.importNotes.groupsDetected.length > 1 ? "s" : ""} and added a{" "}
+                      <strong>Group</strong> column.{" "}
+                    </>
+                  )}
+                  {fileInfo.importNotes.subtotalRowsRemoved > 0 && (
+                    <>Removed {fileInfo.importNotes.subtotalRowsRemoved} subtotal/summary row(s).</>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="section" style={{ marginBottom: 16 }}>
             <div className="section-head">
@@ -788,15 +832,6 @@ export default function App() {
                         {col}
                       </option>
                     ))}
-                    {algoResult && (
-                      <optgroup label="From Apply Algorithms">
-                        {[...algoResult.pca.columnNames, ...algoResult.lda.columnNames].map((col) => (
-                          <option key={col} value={col}>
-                            {col}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
                   </select>
                 </label>
 
@@ -1003,12 +1038,6 @@ export default function App() {
               <span className="download-summary-key">Sort</span>
               <span className="download-summary-val">
                 {sortColumn !== NONE ? `${sortColumn}, ${sortOrder === "asc" ? "ascending" : "descending"}` : "None"}
-              </span>
-            </li>
-            <li>
-              <span className="download-summary-key">Algorithm columns</span>
-              <span className="download-summary-val">
-                {[...algoResult.pca.columnNames, ...algoResult.lda.columnNames].join(", ")}
               </span>
             </li>
           </ul>
