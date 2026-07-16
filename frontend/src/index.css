@@ -460,6 +460,41 @@ input[type="file"] {
   margin-bottom: 16px;
 }
 
+.import-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f2f7f4;
+  border: 1px solid var(--pine);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.import-notes-icon {
+  color: var(--pine);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.import-notes-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--pine-dark);
+}
+
+.import-notes-text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.import-notes-text strong {
+  color: var(--pine-dark);
+}
+
 .dataset-file {
   display: flex;
   align-items: center;
