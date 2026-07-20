@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import multer from "multer";
 import * as XLSX from "xlsx";
@@ -12,7 +12,31 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_EXTENSIONS = /\.(xlsx|xls|csv)$/i;
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_EXTENSIONS.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only .xlsx, .xls, and .csv files are supported."));
+    }
+  },
+});
+
+// Wraps multer's single-file upload so rejected files (wrong type, too large, etc.) return a
+// clean JSON error instead of falling through to Express's default HTML error page.
+function handleUpload(req: Request, res: Response, next: NextFunction) {
+  upload.single("file")(req, res, (err: unknown) => {
+    if (err) {
+      const message = err instanceof Error ? err.message : "Could not upload the file.";
+      return res.status(400).json({ error: message });
+    }
+    next();
+  });
+}
 
 // In-memory store: fileId -> { buffer, sheetName, uploadedAt }
 type StoredFile = {
@@ -35,7 +59,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // POST /api/upload - accepts an Excel file, returns fileId + columns + preview rows
-app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => {
+app.post("/api/upload", handleUpload, (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded." });
   }
@@ -277,7 +301,7 @@ app.post("/api/export", (req: Request, res: Response) => {
     if (sortColumn) suffixParts.push("sorted");
     const suffix = suffixParts.length ? suffixParts.join("-") : "export";
 
-    const downloadName = stored.originalName.replace(/(\.xlsx|\.xls)$/i, "") + `-${suffix}.xlsx`;
+    const downloadName = stored.originalName.replace(/\.(xlsx|xls|csv)$/i, "") + `-${suffix}.xlsx`;
 
     res.setHeader(
       "Content-Type",
