@@ -589,7 +589,7 @@ export default function App() {
             <IconUpload />
           </div>
           <p className="upload-title">Drop a spreadsheet here or browse</p>
-          <p className="meta">Accepts .xlsx and .xls — parsed entirely in memory, nothing is stored server-side</p>
+          <p className="meta">Accepts .xlsx, .xls, and .csv — parsed entirely in memory, nothing is stored server-side</p>
           <button
             type="button"
             className="browse-btn"
@@ -605,7 +605,7 @@ export default function App() {
             id="file-input"
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.csv"
             onChange={handleFileChange}
             disabled={status === "uploading" || status === "sorting"}
             style={{ display: "none" }}
