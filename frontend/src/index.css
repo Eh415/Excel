@@ -831,6 +831,13 @@ table.preview tr:last-child td {
 .actions {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 button {
