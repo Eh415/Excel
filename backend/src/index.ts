@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import crypto from "crypto";
 import { runAlgorithms, AlgorithmError } from "./algorithms";
 import { smartImport } from "./smart-import";
+import { generatePdf } from "./pdf-export";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -211,17 +212,19 @@ app.post("/api/filter-count", (req: Request, res: Response) => {
   }
 });
 
-// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder? }
-// Filters rows (optional), sorts them (optional), and returns the result as a downloadable .xlsx.
+// POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder?, format? }
+// Filters rows (optional), sorts them (optional), and returns the result as a downloadable file —
+// .xlsx by default, or .pdf if format === "pdf".
 // Note: this does NOT include PCA/LDA output columns — Apply Algorithms is a separate analysis
-// step (see /api/apply-algorithms) and does not modify the exported spreadsheet's contents.
-app.post("/api/export", (req: Request, res: Response) => {
-  const { fileId, filterColumn, filterValue, sortColumn, sortOrder } = req.body as {
+// step (see /api/apply-algorithms) and does not modify the exported file's contents.
+app.post("/api/export", async (req: Request, res: Response) => {
+  const { fileId, filterColumn, filterValue, sortColumn, sortOrder, format } = req.body as {
     fileId?: string;
     filterColumn?: string;
     filterValue?: string;
     sortColumn?: string;
     sortOrder?: "asc" | "desc";
+    format?: "xlsx" | "pdf";
   };
 
   if (!fileId) {
@@ -242,6 +245,8 @@ app.post("/api/export", (req: Request, res: Response) => {
     if (rows.length === 0) {
       return res.status(400).json({ error: "The sheet has no data rows." });
     }
+
+    const columns = Object.keys(rows[0]);
 
     // --- Filter step (optional) ---
     if (filterColumn) {
@@ -290,18 +295,31 @@ app.post("/api/export", (req: Request, res: Response) => {
       });
     }
 
+    const suffixParts = [];
+    if (filterColumn) suffixParts.push("filtered");
+    if (sortColumn) suffixParts.push("sorted");
+    const suffix = suffixParts.length ? suffixParts.join("-") : "export";
+    const baseName = stored.originalName.replace(/\.(xlsx|xls|csv)$/i, "");
+
+    if (format === "pdf") {
+      const pdfBuffer = await generatePdf(columns, rows, {
+        fileName: baseName,
+        rowCount: rows.length,
+        filterDescription: filterColumn ? `${filterColumn} = ${filterValue}` : undefined,
+        sortDescription: sortColumn ? `${sortColumn}, ${sortOrder === "desc" ? "descending" : "ascending"}` : undefined,
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${baseName}-${suffix}.pdf"`);
+      return res.send(pdfBuffer);
+    }
+
     const newSheet = XLSX.utils.json_to_sheet(rows);
     const newWorkbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(newWorkbook, newSheet, stored.sheetName);
 
     const outBuffer = XLSX.write(newWorkbook, { type: "buffer", bookType: "xlsx" });
-
-    const suffixParts = [];
-    if (filterColumn) suffixParts.push("filtered");
-    if (sortColumn) suffixParts.push("sorted");
-    const suffix = suffixParts.length ? suffixParts.join("-") : "export";
-
-    const downloadName = stored.originalName.replace(/\.(xlsx|xls|csv)$/i, "") + `-${suffix}.xlsx`;
+    const downloadName = `${baseName}-${suffix}.xlsx`;
 
     res.setHeader(
       "Content-Type",
