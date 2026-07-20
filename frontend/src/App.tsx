@@ -311,6 +311,7 @@ export default function App() {
   const [algoResult, setAlgoResult] = useState<AlgorithmsResponse | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+  const [downloadFormat, setDownloadFormat] = useState<"xlsx" | "pdf" | null>(null);
 
   async function runAlgorithmsRequest() {
     if (!fileInfo || labelColumn === NONE) return;
@@ -409,11 +410,12 @@ export default function App() {
     processFile(file);
   }
 
-  async function handleExportAndDownload() {
+  async function handleExportAndDownload(format: "xlsx" | "pdf" = "xlsx") {
     if (!fileInfo) return;
     if (!algoResult) return; // Apply Algorithms must run first — its results are merged into the download.
 
     setStatus("sorting");
+    setDownloadFormat(format);
     setErrorMsg("");
 
     try {
@@ -426,12 +428,13 @@ export default function App() {
           filterValue: filterColumn === NONE ? undefined : filterValue,
           sortColumn: sortColumn === NONE ? undefined : sortColumn,
           sortOrder: sortColumn === NONE ? undefined : sortOrder,
+          format,
         }),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Sorting failed.");
+        throw new Error(data.error || "Download failed.");
       }
 
       const blob = await res.blob();
@@ -440,7 +443,7 @@ export default function App() {
 
       const disposition = res.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="(.+)"/);
-      const filename = match ? match[1] : "sorted.xlsx";
+      const filename = match ? match[1] : format === "pdf" ? "export.pdf" : "export.xlsx";
 
       a.href = url;
       a.download = filename;
@@ -450,10 +453,12 @@ export default function App() {
       window.URL.revokeObjectURL(url);
 
       setStatus("idle");
+      setDownloadFormat(null);
       setDownloaded(true);
     } catch (err) {
       setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Sorting failed.");
+      setDownloadFormat(null);
+      setErrorMsg(err instanceof Error ? err.message : "Download failed.");
     }
   }
 
@@ -1046,10 +1051,22 @@ export default function App() {
 
           <div className="actions">
             <button
-              onClick={handleExportAndDownload}
+              onClick={() => handleExportAndDownload("xlsx")}
               disabled={status === "sorting" || (filterColumn !== NONE && !filterValue)}
             >
-              {status === "sorting" ? "Processing…" : downloaded ? "Download Again" : "Apply & Download"}
+              {status === "sorting" && downloadFormat === "xlsx"
+                ? "Processing…"
+                : downloaded
+                ? "Download Excel Again"
+                : "Download Excel"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => handleExportAndDownload("pdf")}
+              disabled={status === "sorting" || (filterColumn !== NONE && !filterValue)}
+            >
+              <IconDownload /> {status === "sorting" && downloadFormat === "pdf" ? "Processing…" : "Download PDF"}
             </button>
             <button type="button" className="secondary" onClick={handleReset}>
               Start Over
