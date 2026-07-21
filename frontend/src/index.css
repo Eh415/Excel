@@ -1157,5 +1157,60 @@ button.secondary:hover:not(:disabled) {
 
   .algo-grid {
     grid-template-columns: 1fr;
+
+    /* ---------- Paginated wizard additions ---------- */
+
+.stepper .step {
+  font-family: var(--font-body);
+  cursor: pointer;
+  text-align: left;
+}
+
+.stepper .step:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.stepper .step:not(:disabled):hover {
+  border-color: var(--pine);
+}
+
+.step-panel h2 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  margin: 0 0 6px;
+}
+
+.step-panel .lede {
+  margin: 0 0 18px;
+  color: var(--ink-soft);
+  max-width: 56ch;
+  line-height: 1.5;
+}
+
+.step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.step-panel .field-row {
+  margin-top: 4px;
+}
+
+.page-transition {
+  animation: page-fade 0.2s ease;
+}
+
+@keyframes page-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
   }
 }
