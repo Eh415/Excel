@@ -312,6 +312,7 @@ export default function App() {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState<"xlsx" | "pdf" | null>(null);
+  const [currentStep, setCurrentStep] = useState(1);
 
   async function runAlgorithmsRequest() {
     if (!fileInfo || labelColumn === NONE) return;
@@ -367,6 +368,7 @@ export default function App() {
     setFilterStatus("idle");
     setFilterError("");
     setDownloaded(false);
+    setCurrentStep(1);
     resetAlgorithms();
 
     const formData = new FormData();
@@ -389,6 +391,7 @@ export default function App() {
       setSortColumn(NONE);
       setSortOrder("asc");
       setStatus("idle");
+      setCurrentStep(2);
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
@@ -476,6 +479,7 @@ export default function App() {
     setFilterStatus("idle");
     setFilterError("");
     resetAlgorithms();
+    setCurrentStep(1);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -505,6 +509,14 @@ export default function App() {
     },
   ];
 
+  // How far the user has actually gotten — sidebar/mobile-nav clicks can jump back to any
+  // already-reached page, but can't skip ahead to a page whose data doesn't exist yet.
+  const maxStepReached = !fileInfo ? 1 : !proceeded ? 2 : !algoOpen ? 3 : !algoResult ? 4 : 5;
+
+  function goToStep(n: number) {
+    if (n <= maxStepReached) setCurrentStep(n);
+  }
+
   function nextStepHint(): string {
     if (!fileInfo) return "Upload a spreadsheet to get started.";
     if (!proceeded) return "Review the file below. Filtering is optional — click Proceed to preprocessing when ready.";
@@ -523,7 +535,7 @@ export default function App() {
           <span className="wordmark-mark">
             <span /><span /><span /><span />
           </span>
-          Excel Sorter
+          Dimension Reduction
         </div>
         <span className="version-tag">local · v1.0</span>
       </header>
@@ -551,7 +563,15 @@ export default function App() {
           <p className="sidebar-title">Process</p>
           <ol className="sidebar-steps">
             {steps.map((s) => (
-              <li key={s.n} className={`sidebar-step ${s.status}`}>
+              <li
+                key={s.n}
+                className={`sidebar-step ${s.status} ${s.n === currentStep ? "current" : ""} ${
+                  s.n <= maxStepReached ? "reachable" : ""
+                }`}
+                onClick={() => goToStep(s.n)}
+                role={s.n <= maxStepReached ? "button" : undefined}
+                tabIndex={s.n <= maxStepReached ? 0 : undefined}
+              >
                 <span className="sidebar-step-marker">
                   {s.status === "done" ? <IconCheckCircle /> : s.n}
                 </span>
@@ -567,7 +587,13 @@ export default function App() {
 
         <nav className="stepper-mobile" aria-label="Progress">
           {steps.map((s) => (
-            <div key={s.n} className={`step ${s.status === "active" ? "active" : s.status === "done" ? "done" : ""}`}>
+            <div
+              key={s.n}
+              className={`step ${s.n === currentStep ? "active" : s.status === "done" ? "done" : ""} ${
+                s.n <= maxStepReached ? "reachable" : ""
+              }`}
+              onClick={() => goToStep(s.n)}
+            >
               <span className="num">{s.n}</span> {s.label}
             </div>
           ))}
@@ -575,6 +601,7 @@ export default function App() {
 
         <div className="main-content">
 
+      {currentStep === 1 && (
       <div
         className={`card upload-card ${isDragging ? "dragging" : ""}`}
         onDragOver={(e) => {
@@ -620,8 +647,9 @@ export default function App() {
         {status === "uploading" && <p className="status">Reading file…</p>}
         {status === "error" && <p className="status error">{errorMsg}</p>}
       </div>
+      )}
 
-      {fileInfo && (
+      {currentStep === 2 && fileInfo && (
         <div className="card dataset-card">
           <div className="dataset-header">
             <span className="dataset-title">Uploaded dataset</span>
@@ -806,7 +834,14 @@ export default function App() {
 
           {!proceeded && (
             <div className="proceed-row">
-              <button type="button" className="proceed-btn" onClick={() => setProceeded(true)}>
+              <button
+                type="button"
+                className="proceed-btn"
+                onClick={() => {
+                  setProceeded(true);
+                  setCurrentStep(3);
+                }}
+              >
                 Proceed to preprocessing <IconArrowRight />
               </button>
             </div>
@@ -814,7 +849,7 @@ export default function App() {
         </div>
       )}
 
-      {fileInfo && proceeded && (
+      {currentStep === 3 && fileInfo && proceeded && (
         <div className="card">
           <div className="controls">
             {filterColumn !== NONE && filterValue && (
@@ -857,7 +892,14 @@ export default function App() {
             </p>
 
             <div className="actions">
-              <button type="button" onClick={() => setAlgoOpen(true)} disabled={algoOpen}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAlgoOpen(true);
+                  setCurrentStep(4);
+                }}
+                disabled={algoOpen}
+              >
                 {algoResult ? "Re-run Algorithms" : "Apply Algorithms"}
               </button>
               <button className="secondary" onClick={handleReset}>
@@ -868,7 +910,7 @@ export default function App() {
         </div>
       )}
 
-      {fileInfo && proceeded && algoOpen && (
+      {currentStep === 4 && fileInfo && (
         <div className="card algo-card">
           <div className="algo-header">
             <span className="algo-header-icon">
@@ -916,7 +958,14 @@ export default function App() {
                 >
                   {algoStatus === "running" ? "Running…" : "Run Algorithms"}
                 </button>
-                <button type="button" className="secondary small ghost" onClick={resetAlgorithms}>
+                <button
+                  type="button"
+                  className="secondary small ghost"
+                  onClick={() => {
+                    resetAlgorithms();
+                    setCurrentStep(3);
+                  }}
+                >
                   Cancel
                 </button>
               </div>
@@ -997,11 +1046,11 @@ export default function App() {
               </div>
 
               <div className="algo-actions">
-                <button type="button" className="secondary" onClick={resetAlgorithms}>
+                <button type="button" className="secondary" onClick={() => setCurrentStep(3)}>
                   <IconArrowLeft /> Back
                 </button>
-                <button type="button" className="proceed-btn" onClick={() => setAnalysisOpen((v) => !v)}>
-                  {analysisOpen ? "Hide Analysis" : "View Analysis"} <IconArrowRight />
+                <button type="button" className="secondary" onClick={() => setAnalysisOpen((v) => !v)}>
+                  {analysisOpen ? "Hide Analysis" : "View Analysis"}
                 </button>
               </div>
 
@@ -1015,12 +1064,18 @@ export default function App() {
                   ld1Ratio={algoResult.lda.components[0]?.ratio}
                 />
               )}
+
+              <div className="proceed-row">
+                <button type="button" className="proceed-btn" onClick={() => setCurrentStep(5)}>
+                  Continue to download <IconArrowRight />
+                </button>
+              </div>
             </>
           )}
         </div>
       )}
 
-      {fileInfo && algoResult && (
+      {currentStep === 5 && fileInfo && algoResult && (
         <div className="card download-card">
           <div className="algo-header">
             <span className="algo-header-icon">
