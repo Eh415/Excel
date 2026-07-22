@@ -264,6 +264,22 @@ body {
   z-index: 1;
 }
 
+.sidebar-step.reachable {
+  cursor: pointer;
+}
+
+.sidebar-step.reachable:hover .sidebar-step-label {
+  color: var(--ink);
+}
+
+.sidebar-step.reachable:hover .sidebar-step-marker {
+  border-color: var(--pine);
+}
+
+.sidebar-step.current .sidebar-step-marker {
+  box-shadow: 0 0 0 3px #d9e8de;
+}
+
 .sidebar-step-label {
   font-size: 0.85rem;
   color: var(--ink-soft);
@@ -331,6 +347,10 @@ body {
   background: var(--surface);
   font-size: 0.82rem;
   color: var(--ink-soft);
+}
+
+.step.reachable {
+  cursor: pointer;
 }
 
 .step .num {
