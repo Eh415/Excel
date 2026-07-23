@@ -246,6 +246,88 @@ function LdaScatter({
   );
 }
 
+function SortResultChart({
+  points,
+  isNumeric,
+  columnLabel,
+  chartType,
+}: {
+  points: { label: string; value: number }[];
+  isNumeric: boolean;
+  columnLabel: string;
+  chartType: "line" | "bar";
+}) {
+  const width = 640;
+  const height = 300;
+  const pad = 36;
+
+  const values = points.map((p) => p.value);
+  const minV = chartType === "bar" ? Math.min(...values, 0) : Math.min(...values);
+  const maxV = Math.max(...values);
+  const span = maxV - minV || 1;
+
+  const toX = (i: number) => pad + (i / Math.max(points.length - 1, 1)) * (width - pad * 2);
+  const toY = (v: number) => height - pad - ((v - minV) / span) * (height - pad * 2);
+
+  const pathD = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.value).toFixed(1)}`)
+    .join(" ");
+
+  // Bars share the available width evenly; with up to 300 points a hairline gap between
+  // bars still reads as a bar chart rather than a solid block.
+  const barSlot = (width - pad * 2) / points.length;
+  const barWidth = Math.max(barSlot * 0.7, 1);
+
+  return (
+    <div className="scatter-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} className="scatter-svg">
+        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} className="scatter-axis" />
+        <line x1={pad} y1={pad} x2={pad} y2={height - pad} className="scatter-axis" />
+        <text x={pad} y={20} className="scatter-axis-label">
+          {isNumeric ? `${columnLabel} — min ${minV}, max ${maxV}` : `${columnLabel} (sorted order)`}
+        </text>
+        <text x={pad} y={height - pad + 16} className="scatter-axis-label">
+          row 1
+        </text>
+        <text x={width - pad} y={height - pad + 16} textAnchor="end" className="scatter-axis-label">
+          row {points.length}
+        </text>
+        {chartType === "line" ? (
+          <>
+            <path d={pathD} fill="none" stroke="#35604A" strokeWidth={2.5} />
+            {points.map((p, i) => (
+              <circle key={i} cx={toX(i)} cy={toY(p.value)} r={3.5} fill="#35604A">
+                <title>{`Row ${i + 1}: ${p.label}`}</title>
+              </circle>
+            ))}
+          </>
+        ) : (
+          points.map((p, i) => {
+            const barX = pad + i * barSlot + (barSlot - barWidth) / 2;
+            const y = toY(p.value);
+            const baseline = toY(0);
+            const barTop = Math.min(y, baseline);
+            const barHeight = Math.max(Math.abs(baseline - y), 1);
+            return (
+              <rect
+                key={i}
+                x={barX}
+                y={barTop}
+                width={barWidth}
+                height={barHeight}
+                fill="#35604A"
+                fillOpacity={0.85}
+              >
+                <title>{`Row ${i + 1}: ${p.label}`}</title>
+              </rect>
+            );
+          })
+        )}
+      </svg>
+    </div>
+  );
+}
+
 export default function App() {
   const [fileInfo, setFileInfo] = useState<UploadResponse | null>(null);
 
@@ -295,12 +377,54 @@ export default function App() {
     }
   }
 
+  // Sort Result graph: shows the actual sorted values once a sort column is picked, so you
+  // can visually confirm the sort worked (and see the shape/spread of the data).
+  type SortPoint = { label: string; value: number };
+  const [sortPreviewPoints, setSortPreviewPoints] = useState<SortPoint[] | null>(null);
+  const [sortPreviewIsNumeric, setSortPreviewIsNumeric] = useState(true);
+  const [sortPreviewMeta, setSortPreviewMeta] = useState<{ rowCount: number; sampled: boolean } | null>(null);
+  const [sortPreviewStatus, setSortPreviewStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [sortPreviewError, setSortPreviewError] = useState<string>("");
+  const [sortChartType, setSortChartType] = useState<"line" | "bar">("line");
+
+  async function runSortPreview() {
+    if (!fileInfo || sortColumn === NONE) return;
+    setSortPreviewStatus("loading");
+    setSortPreviewError("");
+    try {
+      const res = await fetch(`${API_BASE}/sort-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId: fileInfo.fileId,
+          sortColumn,
+          sortOrder,
+          filterColumn: filterColumn === NONE ? undefined : filterColumn,
+          filterValue: filterColumn === NONE ? undefined : filterValue,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Could not build the sort graph.");
+      }
+      setSortPreviewPoints(data.points);
+      setSortPreviewIsNumeric(data.isNumeric);
+      setSortPreviewMeta({ rowCount: data.rowCount, sampled: data.sampled });
+      setSortPreviewStatus("idle");
+    } catch (err) {
+      setSortPreviewStatus("error");
+      setSortPreviewError(err instanceof Error ? err.message : "Could not build the sort graph.");
+    }
+  }
+
   function clearFilter() {
     setFilterColumn(NONE);
     setFilterValue("");
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
+    setSortPreviewPoints(null);
+    setSortPreviewMeta(null);
   }
 
   // Apply Algorithms (PCA + LDA), run after preprocessing.
@@ -368,6 +492,8 @@ export default function App() {
     setFilterStatus("idle");
     setFilterError("");
     setDownloaded(false);
+    setSortPreviewPoints(null);
+    setSortPreviewMeta(null);
     setCurrentStep(1);
     resetAlgorithms();
 
@@ -478,6 +604,8 @@ export default function App() {
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
+    setSortPreviewPoints(null);
+    setSortPreviewMeta(null);
     resetAlgorithms();
     setCurrentStep(1);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -731,6 +859,8 @@ export default function App() {
                     setFilterValue("");
                     setFilteredCount(null);
                     setFilterError("");
+                    setSortPreviewPoints(null);
+                    setSortPreviewMeta(null);
                     resetAlgorithms();
                   }}
                 >
@@ -752,6 +882,8 @@ export default function App() {
                       setFilterValue(e.target.value);
                       setFilteredCount(null);
                       setFilterError("");
+                      setSortPreviewPoints(null);
+                      setSortPreviewMeta(null);
                     }}
                   >
                     <option value="">Choose a value…</option>
@@ -865,7 +997,13 @@ export default function App() {
               <div className="field-row">
                 <label>
                   Column
-                  <select value={sortColumn} onChange={(e) => setSortColumn(e.target.value)}>
+                  <select
+                    value={sortColumn}
+                    onChange={(e) => {
+                      setSortColumn(e.target.value);
+                      setSortPreviewPoints(null);
+                    }}
+                  >
                     <option value={NONE}>No sorting</option>
                     {fileInfo.columns.map((col) => (
                       <option key={col} value={col}>
@@ -878,13 +1016,70 @@ export default function App() {
                 {sortColumn !== NONE && (
                   <label>
                     Order
-                    <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}>
+                    <select
+                      value={sortOrder}
+                      onChange={(e) => {
+                        setSortOrder(e.target.value as "asc" | "desc");
+                        setSortPreviewPoints(null);
+                      }}
+                    >
                       <option value="asc">Ascending (A→Z, 0→9)</option>
                       <option value="desc">Descending (Z→A, 9→0)</option>
                     </select>
                   </label>
                 )}
               </div>
+
+              {sortColumn !== NONE && (
+                <>
+                  <div className="filter-apply-row">
+                    <button
+                      type="button"
+                      onClick={runSortPreview}
+                      disabled={sortPreviewStatus === "loading"}
+                    >
+                      <IconSparkle /> {sortPreviewStatus === "loading" ? "Building graph…" : "Graph the sort result"}
+                    </button>
+                  </div>
+                  {sortPreviewStatus === "error" && <p className="status error">{sortPreviewError}</p>}
+                  {sortPreviewPoints && sortPreviewPoints.length > 0 && (
+                    <div className="sort-graph-panel">
+                      <div className="sort-graph-head">
+                        <span className="sort-graph-title">
+                          <IconSparkle /> Sort Result Graph
+                        </span>
+                        <div className="chart-type-toggle">
+                          <button
+                            type="button"
+                            className={`chart-type-btn ${sortChartType === "line" ? "active" : ""}`}
+                            onClick={() => setSortChartType("line")}
+                          >
+                            Line
+                          </button>
+                          <button
+                            type="button"
+                            className={`chart-type-btn ${sortChartType === "bar" ? "active" : ""}`}
+                            onClick={() => setSortChartType("bar")}
+                          >
+                            Bar
+                          </button>
+                        </div>
+                      </div>
+                      <SortResultChart
+                        points={sortPreviewPoints}
+                        isNumeric={sortPreviewIsNumeric}
+                        columnLabel={sortColumn}
+                        chartType={sortChartType}
+                      />
+                      {sortPreviewMeta?.sampled && (
+                        <p className="meta small">
+                          Showing 300 evenly-spaced points across all {sortPreviewMeta.rowCount} rows.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             <p className="meta small preprocess-next-note">
