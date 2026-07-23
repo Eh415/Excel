@@ -212,6 +212,104 @@ app.post("/api/filter-count", (req: Request, res: Response) => {
   }
 });
 
+// POST /api/sort-preview - body: { fileId, sortColumn, sortOrder, filterColumn?, filterValue? }
+// Returns the (optionally filtered) data sorted by sortColumn, as a compact array of
+// { label, value } points for graphing — value is sortColumn's own value if numeric, otherwise
+// just its row position. Used to show a graph of "what did the sort actually produce" right
+// after picking a sort column, without downloading anything.
+app.post("/api/sort-preview", (req: Request, res: Response) => {
+  const { fileId, sortColumn, sortOrder, filterColumn, filterValue } = req.body as {
+    fileId?: string;
+    sortColumn?: string;
+    sortOrder?: "asc" | "desc";
+    filterColumn?: string;
+    filterValue?: string;
+  };
+
+  if (!fileId) {
+    return res.status(400).json({ error: "fileId is required." });
+  }
+  if (!sortColumn) {
+    return res.status(400).json({ error: "sortColumn is required." });
+  }
+
+  const stored = fileStore.get(fileId);
+  if (!stored) {
+    return res.status(404).json({ error: "File not found or has expired. Please re-upload." });
+  }
+
+  try {
+    const sheet = stored.workbook.Sheets[stored.sheetName];
+    let rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "The sheet has no data rows." });
+    }
+    if (!(sortColumn in rows[0])) {
+      return res.status(400).json({ error: `Column "${sortColumn}" does not exist in the sheet.` });
+    }
+
+    if (filterColumn) {
+      if (!(filterColumn in rows[0])) {
+        return res.status(400).json({ error: `Column "${filterColumn}" does not exist in the sheet.` });
+      }
+      if (filterValue === undefined || filterValue === "") {
+        return res.status(400).json({ error: "A filter value is required when filtering by a column." });
+      }
+      rows = rows.filter(
+        (row) => String(row[filterColumn]).trim().toLowerCase() === filterValue.trim().toLowerCase()
+      );
+    }
+
+    const order = sortOrder === "desc" ? "desc" : "asc";
+    rows = [...rows].sort((a, b) => {
+      const valA = a[sortColumn];
+      const valB = b[sortColumn];
+      const numA = Number(valA);
+      const numB = Number(valB);
+      const bothNumeric = valA !== "" && valB !== "" && !Number.isNaN(numA) && !Number.isNaN(numB);
+
+      let comparison: number;
+      if (bothNumeric) {
+        comparison = numA - numB;
+      } else {
+        comparison = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" });
+      }
+      return order === "asc" ? comparison : -comparison;
+    });
+
+    const isNumeric = rows.every((row) => {
+      const v = row[sortColumn];
+      return v === "" || Number.isFinite(Number(v));
+    });
+
+    // Cap how many points we send — thousands of rows would make a noisy, slow chart.
+    // Downsample evenly across the sorted sequence rather than just truncating, so the shape
+    // of the whole sort is still represented even for very large files.
+    const MAX_POINTS = 300;
+    let sampledRows = rows;
+    if (rows.length > MAX_POINTS) {
+      const step = rows.length / MAX_POINTS;
+      sampledRows = Array.from({ length: MAX_POINTS }, (_, i) => rows[Math.floor(i * step)]);
+    }
+
+    const points = sampledRows.map((row, i) => ({
+      label: String(row[sortColumn]),
+      value: isNumeric ? Number(row[sortColumn]) || 0 : i,
+    }));
+
+    res.json({
+      points,
+      isNumeric,
+      rowCount: rows.length,
+      sampled: rows.length > MAX_POINTS,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Something went wrong while building the sort preview." });
+  }
+});
+
 // POST /api/export - body: { fileId, filterColumn?, filterValue?, sortColumn?, sortOrder?, format? }
 // Filters rows (optional), sorts them (optional), and returns the result as a downloadable file —
 // .xlsx by default, or .pdf if format === "pdf".
