@@ -47,7 +47,7 @@ export function generatePdf(
     header: {
       margin: [24, 16, 24, 0],
       columns: [
-        { text: "Excel Sorter", fontSize: 9, bold: true, color: COLOR_INK },
+        { text: "Dimension Reduction", fontSize: 9, bold: true, color: COLOR_INK },
         { text: new Date().toLocaleString(), fontSize: 8, color: COLOR_INK_SOFT, alignment: "right" },
       ],
     },
