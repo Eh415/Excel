@@ -871,6 +871,9 @@ button {
   font-size: 0.92rem;
   font-family: var(--font-body);
   transition: background 0.15s ease, transform 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 button:hover:not(:disabled) {
@@ -1078,6 +1081,72 @@ button.secondary:hover:not(:disabled) {
   margin-top: 18px;
   padding-top: 18px;
   border-top: 1px solid var(--rule);
+}
+
+.sort-graph-panel {
+  border: 1.5px solid var(--pine);
+  background: #f2f7f4;
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 4px;
+  box-shadow: 0 2px 8px rgba(53, 96, 74, 0.12);
+}
+
+.sort-graph-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sort-graph-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--pine-dark);
+}
+
+.sort-graph-panel .scatter-wrap {
+  border-color: var(--pine);
+  margin: 0 0 8px;
+}
+
+.chart-type-toggle {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.chart-type-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.chart-type-btn:not(:last-child) {
+  border-right: 1px solid var(--rule);
+}
+
+.chart-type-btn:hover:not(.active) {
+  background: var(--paper);
+}
+
+.chart-type-btn.active {
+  background: var(--pine);
+  color: #fff;
 }
 
 .scatter-wrap {
