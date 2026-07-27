@@ -1064,6 +1064,331 @@ button.secondary:hover:not(:disabled) {
   margin-bottom: 16px;
 }
 
+/* ---------- PCA & LDA dashboard ---------- */
+
+.pca-lda-dashboard {
+  margin-bottom: 16px;
+}
+
+.pca-lda-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.pca-lda-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pca-lda-stat {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pca-lda-stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.pca-lda-stat-value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: var(--ink);
+}
+
+.pca-lda-stat-value.pine {
+  color: var(--pine-dark);
+}
+
+.pca-lda-stat-value.clay {
+  color: var(--clay);
+}
+
+.pca-lda-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.pca-lda-chart-card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.pca-lda-chart-card h4 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+/* ---------- Visualize & Analysis ---------- */
+
+.visualize-analysis {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.va-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.va-header-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--pine);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.va-title {
+  margin: 0 0 2px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.va-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.98rem;
+  color: var(--ink);
+  margin: 22px 0 12px;
+}
+
+.va-top-stats {
+  margin-bottom: 16px;
+}
+
+/* Interpretation cards */
+
+.interp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.interp-card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.interp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.interp-icon {
+  color: var(--ink-soft);
+  display: flex;
+}
+
+.interp-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--ink);
+  flex: 1;
+}
+
+.interp-headline {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.interp-detail {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.severity-badge {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 9px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+
+.severity-badge.good {
+  background: #e3f0e8;
+  color: var(--pine-dark);
+}
+
+.severity-badge.moderate {
+  background: #f9f1e0;
+  color: #92661c;
+}
+
+.severity-badge.attention {
+  background: #fbe9e5;
+  color: var(--error);
+}
+
+.severity-badge.neutral {
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+
+/* Data Visualization: side-by-side PCA/LDA scatter cards */
+
+.va-viz-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.va-viz-card {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.va-viz-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+
+.va-viz-callout {
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border-left: 3px solid var(--pine);
+  padding: 10px 12px;
+  border-radius: 4px;
+  margin: 0 0 10px;
+}
+
+/* Comparison table */
+
+.comparison-table-wrap {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.comparison-table th {
+  background: var(--paper);
+  text-align: left;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--rule);
+}
+
+.comparison-table th.pca-col {
+  color: var(--pine-dark);
+}
+
+.comparison-table th.lda-col {
+  color: var(--clay);
+}
+
+.comparison-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  color: var(--ink);
+}
+
+.comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+.comparison-table td.pca-col,
+.comparison-table td.lda-col {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-align: center;
+}
+
+.comparison-table td.comparison-desc {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  max-width: 260px;
+}
+
+/* Report text */
+
+.report-text {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 16px 18px;
+  background: var(--surface);
+}
+
+.report-text p {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.report-text p:last-child {
+  margin-bottom: 0;
+}
+
 .algo-actions {
   display: flex;
   justify-content: space-between;
@@ -1246,5 +1571,29 @@ button.secondary:hover:not(:disabled) {
 
   .algo-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pca-lda-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pca-lda-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .va-viz-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .comparison-table {
+    font-size: 0.72rem;
+  }
+
+  .comparison-table td.comparison-desc {
+    display: none;
+  }
+
+  .comparison-table th:last-child {
+    display: none;
   }
 }
