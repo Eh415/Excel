@@ -273,8 +273,6 @@ function SortResultChart({
     .map((p, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(p.value).toFixed(1)}`)
     .join(" ");
 
-  // Bars share the available width evenly; with up to 300 points a hairline gap between
-  // bars still reads as a bar chart rather than a solid block.
   const barSlot = (width - pad * 2) / points.length;
   const barWidth = Math.max(barSlot * 0.7, 1);
 
@@ -328,14 +326,516 @@ function SortResultChart({
   );
 }
 
+function niceAxisMax(maxValue: number): number {
+  if (maxValue <= 0) return 10;
+  const rawMax = maxValue * 1.15;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const residual = rawMax / magnitude;
+  let niceResidual: number;
+  if (residual > 5) niceResidual = 10;
+  else if (residual > 2) niceResidual = 5;
+  else if (residual > 1) niceResidual = 2;
+  else niceResidual = 1;
+  return niceResidual * magnitude;
+}
+
+function VerticalBarChart({
+  components,
+  barColor,
+  barColorAlt,
+}: {
+  components: { label: string; ratio: number }[];
+  barColor: string;
+  barColorAlt: string;
+}) {
+  const width = 300;
+  const height = 200;
+  const padLeft = 38;
+  const padBottom = 26;
+  const padTop = 14;
+  const chartHeight = height - padTop - padBottom;
+  const chartWidth = width - padLeft - 12;
+
+  const maxRatio = Math.max(...components.map((c) => c.ratio), 1);
+  const axisMax = niceAxisMax(maxRatio);
+  const ticks = [0, axisMax / 4, axisMax / 2, (axisMax * 3) / 4, axisMax];
+
+  const barSlot = chartWidth / components.length;
+  const barWidth = barSlot * 0.55;
+
+  const toY = (v: number) => padTop + chartHeight - (v / axisMax) * chartHeight;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto" }}>
+      {ticks.map((t, i) => (
+        <g key={i}>
+          <line
+            x1={padLeft}
+            x2={width - 8}
+            y1={toY(t)}
+            y2={toY(t)}
+            stroke="#dde1d5"
+            strokeDasharray="2,2"
+          />
+          <text x={padLeft - 6} y={toY(t) + 3} textAnchor="end" fontSize="9" fill="#5B6459" fontFamily="IBM Plex Mono, monospace">
+            {Math.round(t)}%
+          </text>
+        </g>
+      ))}
+      <line x1={padLeft} x2={padLeft} y1={padTop} y2={padTop + chartHeight} stroke="#C3CBBB" />
+      <line x1={padLeft} x2={width - 8} y1={padTop + chartHeight} y2={padTop + chartHeight} stroke="#C3CBBB" />
+      {components.map((c, i) => {
+        const barH = (c.ratio / axisMax) * chartHeight;
+        const x = padLeft + i * barSlot + (barSlot - barWidth) / 2;
+        const y = padTop + chartHeight - barH;
+        const fill = i === 0 ? barColor : barColorAlt;
+        return (
+          <g key={c.label}>
+            <title>{`${c.label}: ${c.ratio.toFixed(1)}%`}</title>
+            <rect x={x} y={y} width={barWidth} height={Math.max(barH, 1)} rx={3} fill={fill} />
+            <text x={x + barWidth / 2} y={padTop + chartHeight + 16} textAnchor="middle" fontSize="10" fill="#1C2621" fontFamily="Inter, sans-serif">
+              {c.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function PcaLdaDashboard({
+  pcaComponents,
+  ldaComponents,
+  ldaAccuracy,
+  ldaClasses,
+}: {
+  pcaComponents: AlgorithmComponent[];
+  ldaComponents: AlgorithmComponent[];
+  ldaAccuracy: number | null;
+  ldaClasses: number;
+}) {
+  const pcaTotal = pcaComponents.reduce((s, c) => s + c.ratio, 0);
+  const ldaTotal = ldaComponents.reduce((s, c) => s + c.ratio, 0);
+
+  return (
+    <div className="pca-lda-dashboard">
+      <h3 className="pca-lda-heading">
+        <IconSparkle /> PCA &amp; LDA Analysis
+      </h3>
+
+      <div className="pca-lda-stats-grid">
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">PCA total variance</span>
+          <span className="pca-lda-stat-value pine">{pcaTotal.toFixed(1)}%</span>
+        </div>
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">LDA total variance</span>
+          <span className="pca-lda-stat-value clay">{ldaTotal.toFixed(1)}%</span>
+        </div>
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">LDA accuracy</span>
+          <span className="pca-lda-stat-value clay">{ldaAccuracy !== null ? `${ldaAccuracy.toFixed(1)}%` : "—"}</span>
+        </div>
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">LDA classes</span>
+          <span className="pca-lda-stat-value">{ldaClasses}</span>
+        </div>
+      </div>
+
+      <div className="pca-lda-charts-grid">
+        <div className="pca-lda-chart-card">
+          <h4>PCA Explained Variance</h4>
+          <VerticalBarChart components={pcaComponents} barColor="#35604A" barColorAlt="#8fb5a2" />
+        </div>
+        <div className="pca-lda-chart-card">
+          <h4>LDA Explained Variance</h4>
+          <VerticalBarChart components={ldaComponents} barColor="#C4531D" barColorAlt="#e0a578" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Severity = "good" | "moderate" | "attention" | "neutral";
+
+function SeverityBadge({ severity, label }: { severity: Severity; label?: string }) {
+  const text = label ?? (severity === "good" ? "Good" : severity === "moderate" ? "Moderate" : severity === "attention" ? "Needs Attention" : "—");
+  return <span className={`severity-badge ${severity}`}>{text}</span>;
+}
+
+function InterpretationCard({
+  icon,
+  title,
+  severity,
+  severityLabel,
+  headline,
+  detail,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  severity: Severity;
+  severityLabel?: string;
+  headline: string;
+  detail: string;
+}) {
+  return (
+    <div className="interp-card">
+      <div className="interp-card-head">
+        <span className="interp-icon">{icon}</span>
+        <span className="interp-title">{title}</span>
+        <SeverityBadge severity={severity} label={severityLabel} />
+      </div>
+      <p className="interp-headline">{headline}</p>
+      <p className="interp-detail">{detail}</p>
+    </div>
+  );
+}
+
+function PcaScatter({ scores }: { scores: number[][] }) {
+  const width = 560;
+  const height = 300;
+  const pad = 36;
+
+  const xs = scores.map((s) => s[0]);
+  const ys = scores.map((s) => s[1] ?? 0);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const xSpan = maxX - minX || 1;
+  const ySpan = maxY - minY || 1;
+
+  const toSvgX = (x: number) => pad + ((x - minX) / xSpan) * (width - pad * 2);
+  const toSvgY = (y: number) => height - pad - ((y - minY) / ySpan) * (height - pad * 2);
+
+  return (
+    <div className="scatter-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} className="scatter-svg">
+        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} className="scatter-axis" />
+        <line x1={pad} y1={pad} x2={pad} y2={height - pad} className="scatter-axis" />
+        <text x={width / 2} y={height - 8} className="scatter-axis-label" textAnchor="middle">
+          PC1
+        </text>
+        <text x={-height / 2} y={14} className="scatter-axis-label" textAnchor="middle" transform="rotate(-90)">
+          PC2
+        </text>
+        {scores.map((s, i) => (
+          <circle
+            key={i}
+            cx={toSvgX(s[0])}
+            cy={toSvgY(s[1] ?? 0)}
+            r={4}
+            fill="#35604A"
+            fillOpacity={0.65}
+            stroke="#fff"
+            strokeWidth={0.5}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function ComparisonTable({
+  pcaTotal,
+  ldaTotal,
+  pc1Ratio,
+  ld1Ratio,
+  pcaComponentCount,
+  ldaComponentCount,
+}: {
+  pcaTotal: number;
+  ldaTotal: number;
+  pc1Ratio: number;
+  ld1Ratio: number;
+  pcaComponentCount: number;
+  ldaComponentCount: number;
+}) {
+  const rows: { metric: string; pca: string; lda: string; description: string }[] = [
+    {
+      metric: "Algorithm Type",
+      pca: "Unsupervised",
+      lda: "Supervised",
+      description: "PCA ignores class labels; LDA uses them to maximize class separation.",
+    },
+    {
+      metric: "Components Extracted",
+      pca: String(pcaComponentCount),
+      lda: String(ldaComponentCount),
+      description: "Number of new axes (dimensions) produced by each algorithm.",
+    },
+    {
+      metric: "Total Variance Explained",
+      pca: `${pcaTotal.toFixed(2)}%`,
+      lda: `${ldaTotal.toFixed(2)}%`,
+      description: "Sum of variance captured across all retained components.",
+    },
+    {
+      metric: "Dominant Component (1st axis)",
+      pca: `${pc1Ratio.toFixed(2)}%`,
+      lda: `${ld1Ratio.toFixed(2)}%`,
+      description: "Variance carried by the strongest single component.",
+    },
+    {
+      metric: "Reconstruction / PCA Accuracy",
+      pca: `${pcaTotal.toFixed(2)}%`,
+      lda: "—",
+      description: "How much of the original data PCA can rebuild from the chosen components.",
+    },
+  ];
+
+  return (
+    <div className="comparison-table-wrap">
+      <table className="comparison-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th className="pca-col">PCA</th>
+            <th className="lda-col">LDA</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.metric}>
+              <td>{r.metric}</td>
+              <td className="pca-col">{r.pca}</td>
+              <td className="lda-col">{r.lda}</td>
+              <td className="comparison-desc">{r.description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }) {
+  const pcaComponents = algoResult.pca.components;
+  const ldaComponents = algoResult.lda.components;
+  const pcaTotal = pcaComponents.reduce((s, c) => s + c.ratio, 0);
+  const ldaTotal = ldaComponents.reduce((s, c) => s + c.ratio, 0);
+  const pc1Ratio = pcaComponents[0]?.ratio ?? 0;
+  const ld1Ratio = ldaComponents[0]?.ratio ?? 0;
+  const ldaAccuracy = algoResult.lda.accuracy;
+
+  // --- Variance Retention (PCA total variance) ---
+  const retentionSeverity: Severity = pcaTotal >= 80 ? "good" : pcaTotal >= 50 ? "moderate" : "attention";
+  const retentionHeadline =
+    retentionSeverity === "good"
+      ? `PCA retains ${pcaTotal.toFixed(1)}% — strong retention.`
+      : retentionSeverity === "moderate"
+      ? `PCA retains ${pcaTotal.toFixed(1)}% — moderate retention, some patterns may be diluted.`
+      : `PCA retains only ${pcaTotal.toFixed(1)}% — low retention detected.`;
+  const retentionDetail =
+    "Variance retention measures how much of the original dataset's information is preserved after dimensionality reduction. PCA transforms high-dimensional data into a smaller set of uncorrelated components ranked by the amount of variance they capture. Retention above 80% means the reduced representation closely mirrors the original data structure with minimal information loss. Between 50–80%, some patterns may be diluted — consider retaining additional components. Below 50%, the data has high intrinsic dimensionality that 2 components alone can't fully capture.";
+
+  // --- PCA Accuracy (Reconstruction) — mathematically the same number as total variance,
+  // since the fraction of variance explained is exactly the fraction of the data PCA can
+  // rebuild from the retained components. ---
+  const reconSeverity: Severity = pcaTotal >= 80 ? "good" : pcaTotal >= 60 ? "moderate" : "attention";
+  const reconHeadline =
+    reconSeverity === "good"
+      ? `${pcaTotal.toFixed(1)}% reconstruction accuracy — faithful summary.`
+      : reconSeverity === "moderate"
+      ? `${pcaTotal.toFixed(1)}% reconstruction accuracy — acceptable for exploration.`
+      : `${pcaTotal.toFixed(1)}% reconstruction accuracy — significant loss.`;
+  const reconDetail =
+    "PCA accuracy here means reconstruction accuracy — the cumulative percentage of variance recovered when the data is rebuilt from the selected principal components. Above 80% indicates the projection is a faithful summary of the data; between 60–80% is acceptable for exploration but may hide subtle patterns; below 60% indicates the original data is too complex to represent in only 2 components.";
+
+  // --- Class Separability (LDA accuracy) ---
+  const sepSeverity: Severity = ldaAccuracy === null ? "neutral" : ldaAccuracy >= 85 ? "good" : ldaAccuracy >= 70 ? "moderate" : "attention";
+  const sepHeadline =
+    ldaAccuracy === null
+      ? "Accuracy not available — too few rows were held out to measure this reliably."
+      : sepSeverity === "good"
+      ? `${ldaAccuracy.toFixed(1)}% accuracy — strong class separation.`
+      : sepSeverity === "moderate"
+      ? `${ldaAccuracy.toFixed(1)}% accuracy — partial overlap between classes.`
+      : `${ldaAccuracy.toFixed(1)}% accuracy — classes are poorly separated.`;
+  const sepDetail =
+    "Class separability quantifies how well LDA can distinguish between predefined classes. Unlike PCA, which is unsupervised, LDA uses class labels to find linear combinations of features that maximize the ratio of between-class variance to within-class variance. Accuracy above 85% indicates clear, well-separated clusters. Between 70–85%, there's partial overlap between classes. Below 70%, the classes are poorly separated by the features available.";
+
+  // --- Dominant Component (PC1's own share) ---
+  const domSeverity: Severity = pc1Ratio >= 50 ? "neutral" : "neutral";
+  const domLabel = pc1Ratio >= 50 ? "Concentrated" : "Distributed";
+  const domHeadline =
+    pc1Ratio >= 50
+      ? `PC1 explains ${pc1Ratio.toFixed(1)}% — a single strong pattern governs the data.`
+      : `PC1 explains ${pc1Ratio.toFixed(1)}% — variance is distributed across components.`;
+  const domDetail =
+    "Dominant component analysis examines how much variance the first principal component (PC1) captures relative to the total. When PC1 explains more than 50%, it indicates a single strong underlying pattern governs the data. When PC1 explains less than 50%, the data exhibits multidimensional complexity with several independent sources of variation contributing roughly equally.";
+
+  return (
+    <div className="visualize-analysis">
+      <div className="va-header">
+        <span className="va-header-icon">
+          <IconEye />
+        </span>
+        <div>
+          <h2 className="va-title">Visualize &amp; Analysis</h2>
+          <p className="meta">2D scatter plots, variance analysis, and detailed interpretation.</p>
+        </div>
+      </div>
+
+      <h3 className="va-section-heading">
+        <IconSparkle /> Data Interpretation
+      </h3>
+
+      <div className="pca-lda-stats-grid va-top-stats">
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">Datasets</span>
+          <span className="pca-lda-stat-value">1</span>
+        </div>
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">PCA variance</span>
+          <span className="pca-lda-stat-value pine">{pcaTotal.toFixed(1)}%</span>
+        </div>
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">PCA accuracy</span>
+          <span className="pca-lda-stat-value pine">{pcaTotal.toFixed(1)}%</span>
+        </div>
+        <div className="pca-lda-stat">
+          <span className="pca-lda-stat-label">LDA accuracy</span>
+          <span className="pca-lda-stat-value clay">{ldaAccuracy !== null ? `${ldaAccuracy.toFixed(1)}%` : "—"}</span>
+        </div>
+      </div>
+
+      <div className="interp-grid">
+        <InterpretationCard
+          icon={<IconSparkle />}
+          title="Variance Retention"
+          severity={retentionSeverity}
+          headline={retentionHeadline}
+          detail={retentionDetail}
+        />
+        <InterpretationCard
+          icon={<IconTarget />}
+          title="PCA Accuracy (Reconstruction)"
+          severity={reconSeverity}
+          headline={reconHeadline}
+          detail={reconDetail}
+        />
+        <InterpretationCard
+          icon={<IconTarget />}
+          title="Class Separability (LDA)"
+          severity={sepSeverity}
+          headline={sepHeadline}
+          detail={sepDetail}
+        />
+        <InterpretationCard
+          icon={<IconSparkle />}
+          title="Dominant Component"
+          severity={domSeverity}
+          severityLabel={domLabel}
+          headline={domHeadline}
+          detail={domDetail}
+        />
+      </div>
+
+      <h3 className="va-section-heading">
+        <IconEye /> Data Visualization
+      </h3>
+
+      <div className="va-viz-grid">
+        <div className="va-viz-card">
+          <p className="va-viz-title">
+            <span className="legend-swatch" style={{ background: "#35604A" }} /> PCA — 2D Projection
+          </p>
+          <p className="va-viz-callout">
+            The PCA 2D Projection plots each record onto the two strongest principal components (PC1 horizontal, PC2
+            vertical) — the directions that capture the most variance. Points close together share similar feature
+            patterns; points far apart are most different. This view reveals natural clusters, outliers, and the
+            overall shape of the data <strong>without</strong> using any class labels.
+          </p>
+          <PcaScatter scores={algoResult.pca.scores} />
+        </div>
+        <div className="va-viz-card">
+          <p className="va-viz-title">
+            <span className="legend-swatch" style={{ background: "#7A5FA0" }} /> LDA — 2D Projection
+          </p>
+          <p className="va-viz-callout">
+            The LDA 2D Projection plots each record onto the two strongest discriminant axes (LD1 horizontal, LD2
+            vertical) — directions chosen to <strong>maximize separation between classes</strong> and minimize
+            variation within each class. Tight, well-separated groups indicate the features distinguish the classes
+            effectively; overlapping points indicate weak class boundaries.
+          </p>
+          <LdaScatter
+            scatter={algoResult.lda.scatter}
+            classes={algoResult.lda.classes}
+            numericColumns={algoResult.numericColumns}
+            labelColumn={algoResult.lda.labelColumn}
+            accuracy={algoResult.lda.accuracy}
+            ld1Ratio={ld1Ratio}
+          />
+        </div>
+      </div>
+
+      <PcaLdaDashboard
+        pcaComponents={pcaComponents}
+        ldaComponents={ldaComponents}
+        ldaAccuracy={ldaAccuracy}
+        ldaClasses={algoResult.lda.classes.length}
+      />
+
+      <h3 className="va-section-heading">Detailed Comparison Summary</h3>
+      <p className="meta" style={{ marginBottom: 10 }}>
+        Side-by-side comparison of every metric produced by both algorithms, including components, total variance,
+        dominant axis, PCA reconstruction accuracy, and LDA class accuracy.
+      </p>
+      <ComparisonTable
+        pcaTotal={pcaTotal}
+        ldaTotal={ldaTotal}
+        pc1Ratio={pc1Ratio}
+        ld1Ratio={ld1Ratio}
+        pcaComponentCount={pcaComponents.length}
+        ldaComponentCount={ldaComponents.length}
+      />
+
+      <h3 className="va-section-heading">Report</h3>
+      <div className="report-text">
+        <p>
+          This dataset was analyzed using <strong>{algoResult.numericColumns.join(", ")}</strong> as the numeric
+          features. <strong>PCA</strong> (unsupervised) retained {pcaTotal.toFixed(1)}% of total variance across{" "}
+          {pcaComponents.length} components, with PC1 alone accounting for {pc1Ratio.toFixed(1)}% —{" "}
+          {pc1Ratio >= 50
+            ? "meaning a single dominant pattern drives most of the variation in this data."
+            : "meaning variation is spread fairly evenly across multiple underlying patterns rather than one dominant axis."}
+        </p>
+        <p>
+          <strong>LDA</strong> (supervised), using <strong>{algoResult.lda.labelColumn}</strong> as the class label
+          across {algoResult.lda.classes.length} classes, achieved{" "}
+          {ldaAccuracy !== null ? (
+            <>
+              {ldaAccuracy.toFixed(1)}% held-out classification accuracy
+              {algoResult.lda.testSetSize < 5 ? " (measured on a very small held-out set, so treat this as indicative rather than definitive)" : ""}
+            </>
+          ) : (
+            "no measurable held-out accuracy, since too few rows were available to hold out a reliable test set"
+          )}
+          , with LD1 capturing {ld1Ratio.toFixed(1)}% of the between-class separation.
+        </p>
+        <p>
+          Overall,{" "}
+          {retentionSeverity === "good" && sepSeverity === "good"
+            ? "both the unsupervised structure (PCA) and the class-driven structure (LDA) are well captured in just two dimensions — this is a strong candidate for 2D visualization and downstream modeling."
+            : retentionSeverity === "attention" && sepSeverity !== "attention"
+            ? "while PCA alone loses a fair amount of the original variance in 2 dimensions, the class labels give LDA meaningfully more to work with — the class structure is clearer than the raw variance structure."
+            : sepSeverity === "attention"
+            ? `the classes in ${algoResult.lda.labelColumn} are not cleanly separated by ${algoResult.numericColumns.join(", ")} alone — consider whether additional or different features might better distinguish these groups.`
+            : "the two methods offer complementary views: PCA shows the natural shape of the data, while LDA highlights how well the current features distinguish the chosen classes."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [fileInfo, setFileInfo] = useState<UploadResponse | null>(null);
 
-  // Filter (optional): e.g. Gender = Male
   const [filterColumn, setFilterColumn] = useState<string>(NONE);
   const [filterValue, setFilterValue] = useState<string>("");
 
-  // Sort (optional)
   const [sortColumn, setSortColumn] = useState<string>(NONE);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
@@ -346,7 +846,6 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Result of applying the filter right after upload: null until "Apply filter" is clicked.
   const [filteredCount, setFilteredCount] = useState<number | null>(null);
   const [filterStatus, setFilterStatus] = useState<"idle" | "checking" | "error">("idle");
   const [filterError, setFilterError] = useState<string>("");
@@ -377,8 +876,6 @@ export default function App() {
     }
   }
 
-  // Sort Result graph: shows the actual sorted values once a sort column is picked, so you
-  // can visually confirm the sort worked (and see the shape/spread of the data).
   type SortPoint = { label: string; value: number };
   const [sortPreviewPoints, setSortPreviewPoints] = useState<SortPoint[] | null>(null);
   const [sortPreviewIsNumeric, setSortPreviewIsNumeric] = useState(true);
@@ -427,7 +924,6 @@ export default function App() {
     setSortPreviewMeta(null);
   }
 
-  // Apply Algorithms (PCA + LDA), run after preprocessing.
   const [algoOpen, setAlgoOpen] = useState(false);
   const [labelColumn, setLabelColumn] = useState<string>(NONE);
   const [algoStatus, setAlgoStatus] = useState<"idle" | "running" | "error">("idle");
@@ -472,8 +968,6 @@ export default function App() {
     setLabelColumn(NONE);
     setAlgoStatus("idle");
     setAlgoError("");
-    // If the current sort was set to an algorithm-output column (PC1, LD1, ...), it won't exist
-    // anymore once results are cleared — fall back to no sorting rather than leaving a dangling value.
     if (fileInfo && !fileInfo.columns.includes(sortColumn) && sortColumn !== NONE) {
       setSortColumn(NONE);
     }
@@ -541,7 +1035,7 @@ export default function App() {
 
   async function handleExportAndDownload(format: "xlsx" | "pdf" = "xlsx") {
     if (!fileInfo) return;
-    if (!algoResult) return; // Apply Algorithms must run first — its results are merged into the download.
+    if (!algoResult) return;
 
     setStatus("sorting");
     setDownloadFormat(format);
@@ -611,7 +1105,6 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  // Sidebar progress state, purely presentational
   type StepStatus = "done" | "active" | "upcoming";
   const steps: { n: number; label: string; status: StepStatus }[] = [
     { n: 1, label: "Upload", status: fileInfo ? "done" : "active" },
@@ -637,8 +1130,6 @@ export default function App() {
     },
   ];
 
-  // How far the user has actually gotten — sidebar/mobile-nav clicks can jump back to any
-  // already-reached page, but can't skip ahead to a page whose data doesn't exist yet.
   const maxStepReached = !fileInfo ? 1 : !proceeded ? 2 : !algoOpen ? 3 : !algoResult ? 4 : 5;
 
   function goToStep(n: number) {
@@ -1245,19 +1736,12 @@ export default function App() {
                   <IconArrowLeft /> Back
                 </button>
                 <button type="button" className="secondary" onClick={() => setAnalysisOpen((v) => !v)}>
-                  {analysisOpen ? "Hide Analysis" : "View Analysis"}
+                  {analysisOpen ? "Hide Analysis" : "Visualize & Analysis"}
                 </button>
               </div>
 
               {analysisOpen && (
-                <LdaScatter
-                  scatter={algoResult.lda.scatter}
-                  classes={algoResult.lda.classes}
-                  numericColumns={algoResult.numericColumns}
-                  labelColumn={algoResult.lda.labelColumn}
-                  accuracy={algoResult.lda.accuracy}
-                  ld1Ratio={algoResult.lda.components[0]?.ratio}
-                />
+                <VisualizeAndAnalysis algoResult={algoResult} />
               )}
 
               <div className="proceed-row">
