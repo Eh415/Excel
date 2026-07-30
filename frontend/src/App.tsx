@@ -109,6 +109,32 @@ function IconCheckCircle() {
   );
 }
 
+function IconSettings() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </svg>
+  );
+}
+
+function IconDocument() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+      <path d="M14 3v5h5M9 13h6M9 17h6M9 9h1" />
+    </svg>
+  );
+}
+
+function IconPulse() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h4l2-7 4 14 2-7h6" />
+    </svg>
+  );
+}
+
 type AlgorithmComponent = { label: string; ratio: number };
 type ScatterPoint = { class: string; x: number; y: number };
 type AlgorithmsResponse = {
@@ -610,7 +636,7 @@ function ComparisonTable({
   );
 }
 
-function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }) {
+function getAnalysisData(algoResult: AlgorithmsResponse) {
   const pcaComponents = algoResult.pca.components;
   const ldaComponents = algoResult.lda.components;
   const pcaTotal = pcaComponents.reduce((s, c) => s + c.ratio, 0);
@@ -619,7 +645,6 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
   const ld1Ratio = ldaComponents[0]?.ratio ?? 0;
   const ldaAccuracy = algoResult.lda.accuracy;
 
-  // --- Variance Retention (PCA total variance) ---
   const retentionSeverity: Severity = pcaTotal >= 80 ? "good" : pcaTotal >= 50 ? "moderate" : "attention";
   const retentionHeadline =
     retentionSeverity === "good"
@@ -630,9 +655,6 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
   const retentionDetail =
     "Variance retention measures how much of the original dataset's information is preserved after dimensionality reduction. PCA transforms high-dimensional data into a smaller set of uncorrelated components ranked by the amount of variance they capture. Retention above 80% means the reduced representation closely mirrors the original data structure with minimal information loss. Between 50–80%, some patterns may be diluted — consider retaining additional components. Below 50%, the data has high intrinsic dimensionality that 2 components alone can't fully capture.";
 
-  // --- PCA Accuracy (Reconstruction) — mathematically the same number as total variance,
-  // since the fraction of variance explained is exactly the fraction of the data PCA can
-  // rebuild from the retained components. ---
   const reconSeverity: Severity = pcaTotal >= 80 ? "good" : pcaTotal >= 60 ? "moderate" : "attention";
   const reconHeadline =
     reconSeverity === "good"
@@ -643,7 +665,6 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
   const reconDetail =
     "PCA accuracy here means reconstruction accuracy — the cumulative percentage of variance recovered when the data is rebuilt from the selected principal components. Above 80% indicates the projection is a faithful summary of the data; between 60–80% is acceptable for exploration but may hide subtle patterns; below 60% indicates the original data is too complex to represent in only 2 components.";
 
-  // --- Class Separability (LDA accuracy) ---
   const sepSeverity: Severity = ldaAccuracy === null ? "neutral" : ldaAccuracy >= 85 ? "good" : ldaAccuracy >= 70 ? "moderate" : "attention";
   const sepHeadline =
     ldaAccuracy === null
@@ -656,8 +677,7 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
   const sepDetail =
     "Class separability quantifies how well LDA can distinguish between predefined classes. Unlike PCA, which is unsupervised, LDA uses class labels to find linear combinations of features that maximize the ratio of between-class variance to within-class variance. Accuracy above 85% indicates clear, well-separated clusters. Between 70–85%, there's partial overlap between classes. Below 70%, the classes are poorly separated by the features available.";
 
-  // --- Dominant Component (PC1's own share) ---
-  const domSeverity: Severity = pc1Ratio >= 50 ? "neutral" : "neutral";
+  const domSeverity: Severity = "neutral";
   const domLabel = pc1Ratio >= 50 ? "Concentrated" : "Distributed";
   const domHeadline =
     pc1Ratio >= 50
@@ -665,6 +685,33 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
       : `PC1 explains ${pc1Ratio.toFixed(1)}% — variance is distributed across components.`;
   const domDetail =
     "Dominant component analysis examines how much variance the first principal component (PC1) captures relative to the total. When PC1 explains more than 50%, it indicates a single strong underlying pattern governs the data. When PC1 explains less than 50%, the data exhibits multidimensional complexity with several independent sources of variation contributing roughly equally.";
+
+  return {
+    pcaComponents,
+    ldaComponents,
+    pcaTotal,
+    ldaTotal,
+    pc1Ratio,
+    ld1Ratio,
+    ldaAccuracy,
+    retentionSeverity,
+    retentionHeadline,
+    retentionDetail,
+    reconSeverity,
+    reconHeadline,
+    reconDetail,
+    sepSeverity,
+    sepHeadline,
+    sepDetail,
+    domSeverity,
+    domLabel,
+    domHeadline,
+    domDetail,
+  };
+}
+
+function VisualizeAnalysisSection({ algoResult }: { algoResult: AlgorithmsResponse }) {
+  const d = getAnalysisData(algoResult);
 
   return (
     <div className="visualize-analysis">
@@ -689,15 +736,15 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
         </div>
         <div className="pca-lda-stat">
           <span className="pca-lda-stat-label">PCA variance</span>
-          <span className="pca-lda-stat-value pine">{pcaTotal.toFixed(1)}%</span>
+          <span className="pca-lda-stat-value pine">{d.pcaTotal.toFixed(1)}%</span>
         </div>
         <div className="pca-lda-stat">
           <span className="pca-lda-stat-label">PCA accuracy</span>
-          <span className="pca-lda-stat-value pine">{pcaTotal.toFixed(1)}%</span>
+          <span className="pca-lda-stat-value pine">{d.pcaTotal.toFixed(1)}%</span>
         </div>
         <div className="pca-lda-stat">
           <span className="pca-lda-stat-label">LDA accuracy</span>
-          <span className="pca-lda-stat-value clay">{ldaAccuracy !== null ? `${ldaAccuracy.toFixed(1)}%` : "—"}</span>
+          <span className="pca-lda-stat-value clay">{d.ldaAccuracy !== null ? `${d.ldaAccuracy.toFixed(1)}%` : "—"}</span>
         </div>
       </div>
 
@@ -705,31 +752,31 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
         <InterpretationCard
           icon={<IconSparkle />}
           title="Variance Retention"
-          severity={retentionSeverity}
-          headline={retentionHeadline}
-          detail={retentionDetail}
+          severity={d.retentionSeverity}
+          headline={d.retentionHeadline}
+          detail={d.retentionDetail}
         />
         <InterpretationCard
           icon={<IconTarget />}
           title="PCA Accuracy (Reconstruction)"
-          severity={reconSeverity}
-          headline={reconHeadline}
-          detail={reconDetail}
+          severity={d.reconSeverity}
+          headline={d.reconHeadline}
+          detail={d.reconDetail}
         />
         <InterpretationCard
           icon={<IconTarget />}
           title="Class Separability (LDA)"
-          severity={sepSeverity}
-          headline={sepHeadline}
-          detail={sepDetail}
+          severity={d.sepSeverity}
+          headline={d.sepHeadline}
+          detail={d.sepDetail}
         />
         <InterpretationCard
           icon={<IconSparkle />}
           title="Dominant Component"
-          severity={domSeverity}
-          severityLabel={domLabel}
-          headline={domHeadline}
-          detail={domDetail}
+          severity={d.domSeverity}
+          severityLabel={d.domLabel}
+          headline={d.domHeadline}
+          detail={d.domDetail}
         />
       </div>
 
@@ -766,15 +813,15 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
             numericColumns={algoResult.numericColumns}
             labelColumn={algoResult.lda.labelColumn}
             accuracy={algoResult.lda.accuracy}
-            ld1Ratio={ld1Ratio}
+            ld1Ratio={d.ld1Ratio}
           />
         </div>
       </div>
 
       <PcaLdaDashboard
-        pcaComponents={pcaComponents}
-        ldaComponents={ldaComponents}
-        ldaAccuracy={ldaAccuracy}
+        pcaComponents={d.pcaComponents}
+        ldaComponents={d.ldaComponents}
+        ldaAccuracy={d.ldaAccuracy}
         ldaClasses={algoResult.lda.classes.length}
       />
 
@@ -784,44 +831,61 @@ function VisualizeAndAnalysis({ algoResult }: { algoResult: AlgorithmsResponse }
         dominant axis, PCA reconstruction accuracy, and LDA class accuracy.
       </p>
       <ComparisonTable
-        pcaTotal={pcaTotal}
-        ldaTotal={ldaTotal}
-        pc1Ratio={pc1Ratio}
-        ld1Ratio={ld1Ratio}
-        pcaComponentCount={pcaComponents.length}
-        ldaComponentCount={ldaComponents.length}
+        pcaTotal={d.pcaTotal}
+        ldaTotal={d.ldaTotal}
+        pc1Ratio={d.pc1Ratio}
+        ld1Ratio={d.ld1Ratio}
+        pcaComponentCount={d.pcaComponents.length}
+        ldaComponentCount={d.ldaComponents.length}
       />
+    </div>
+  );
+}
 
-      <h3 className="va-section-heading">Report</h3>
+function ReportSection({ algoResult }: { algoResult: AlgorithmsResponse }) {
+  const d = getAnalysisData(algoResult);
+
+  return (
+    <div className="visualize-analysis">
+      <div className="va-header">
+        <span className="va-header-icon">
+          <IconDocument />
+        </span>
+        <div>
+          <h2 className="va-title">Report</h2>
+          <p className="meta">A written summary of everything found above.</p>
+        </div>
+      </div>
+
       <div className="report-text">
         <p>
           This dataset was analyzed using <strong>{algoResult.numericColumns.join(", ")}</strong> as the numeric
-          features. <strong>PCA</strong> (unsupervised) retained {pcaTotal.toFixed(1)}% of total variance across{" "}
-          {pcaComponents.length} components, with PC1 alone accounting for {pc1Ratio.toFixed(1)}% —{" "}
-          {pc1Ratio >= 50
+          features. <strong>PCA</strong> (unsupervised) retained {d.pcaTotal.toFixed(1)}% of total variance across{" "}
+          {d.pcaComponents.length} components, with PC1 alone accounting for {d.pc1Ratio.toFixed(1)}% —{" "}
+          {d.pc1Ratio >= 50
             ? "meaning a single dominant pattern drives most of the variation in this data."
             : "meaning variation is spread fairly evenly across multiple underlying patterns rather than one dominant axis."}
         </p>
         <p>
           <strong>LDA</strong> (supervised), using <strong>{algoResult.lda.labelColumn}</strong> as the class label
           across {algoResult.lda.classes.length} classes, achieved{" "}
-          {ldaAccuracy !== null ? (
+          {d.ldaAccuracy !== null ? (
             <>
-              {ldaAccuracy.toFixed(1)}% held-out classification accuracy
+              {d.ldaAccuracy.toFixed(1)}% held-out classification accuracy
               {algoResult.lda.testSetSize < 5 ? " (measured on a very small held-out set, so treat this as indicative rather than definitive)" : ""}
             </>
           ) : (
             "no measurable held-out accuracy, since too few rows were available to hold out a reliable test set"
           )}
-          , with LD1 capturing {ld1Ratio.toFixed(1)}% of the between-class separation.
+          , with LD1 capturing {d.ld1Ratio.toFixed(1)}% of the between-class separation.
         </p>
         <p>
           Overall,{" "}
-          {retentionSeverity === "good" && sepSeverity === "good"
+          {d.retentionSeverity === "good" && d.sepSeverity === "good"
             ? "both the unsupervised structure (PCA) and the class-driven structure (LDA) are well captured in just two dimensions — this is a strong candidate for 2D visualization and downstream modeling."
-            : retentionSeverity === "attention" && sepSeverity !== "attention"
+            : d.retentionSeverity === "attention" && d.sepSeverity !== "attention"
             ? "while PCA alone loses a fair amount of the original variance in 2 dimensions, the class labels give LDA meaningfully more to work with — the class structure is clearer than the raw variance structure."
-            : sepSeverity === "attention"
+            : d.sepSeverity === "attention"
             ? `the classes in ${algoResult.lda.labelColumn} are not cleanly separated by ${algoResult.numericColumns.join(", ")} alone — consider whether additional or different features might better distinguish these groups.`
             : "the two methods offer complementary views: PCA shows the natural shape of the data, while LDA highlights how well the current features distinguish the chosen classes."}
         </p>
@@ -929,7 +993,6 @@ export default function App() {
   const [algoStatus, setAlgoStatus] = useState<"idle" | "running" | "error">("idle");
   const [algoError, setAlgoError] = useState<string>("");
   const [algoResult, setAlgoResult] = useState<AlgorithmsResponse | null>(null);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState<"xlsx" | "pdf" | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -939,7 +1002,6 @@ export default function App() {
     setAlgoStatus("running");
     setAlgoError("");
     setAlgoResult(null);
-    setAnalysisOpen(false);
     try {
       const res = await fetch(`${API_BASE}/apply-algorithms`, {
         method: "POST",
@@ -972,7 +1034,6 @@ export default function App() {
       setSortColumn(NONE);
     }
     setAlgoResult(null);
-    setAnalysisOpen(false);
     setDownloaded(false);
   }
 
@@ -1011,7 +1072,6 @@ export default function App() {
       setSortColumn(NONE);
       setSortOrder("asc");
       setStatus("idle");
-      setCurrentStep(2);
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
@@ -1106,59 +1166,52 @@ export default function App() {
   }
 
   type StepStatus = "done" | "active" | "upcoming";
-  const steps: { n: number; label: string; status: StepStatus }[] = [
-    { n: 1, label: "Upload", status: fileInfo ? "done" : "active" },
+  const steps: { n: number; label: string; icon: React.ReactNode; status: StepStatus }[] = [
+    { n: 1, label: "Upload", icon: <IconUpload />, status: fileInfo ? "done" : "active" },
     {
       n: 2,
-      label: "Review",
+      label: "Preprocess",
+      icon: <IconSettings />,
       status: !fileInfo ? "upcoming" : proceeded ? "done" : "active",
     },
     {
       n: 3,
-      label: "Preprocess",
-      status: !proceeded ? "upcoming" : algoOpen || algoResult ? "done" : "active",
+      label: "Algorithms",
+      icon: <IconPulse />,
+      status: !proceeded ? "upcoming" : algoResult ? "done" : "active",
     },
     {
       n: 4,
-      label: "Algorithms",
-      status: !proceeded ? "upcoming" : algoResult ? "done" : algoOpen ? "active" : "upcoming",
+      label: "Visualize & Analysis",
+      icon: <IconEye />,
+      status: !algoResult ? "upcoming" : currentStep > 4 ? "done" : "active",
     },
     {
       n: 5,
-      label: "Download",
+      label: "Report",
+      icon: <IconDocument />,
+      status: !algoResult ? "upcoming" : currentStep > 5 ? "done" : "active",
+    },
+    {
+      n: 6,
+      label: "Export",
+      icon: <IconDownload />,
       status: !algoResult ? "upcoming" : downloaded ? "done" : "active",
     },
   ];
 
-  const maxStepReached = !fileInfo ? 1 : !proceeded ? 2 : !algoOpen ? 3 : !algoResult ? 4 : 5;
+  // Steps 4-6 (Visualize & Analysis, Report, Export) are all just different views of the same
+  // already-computed algoResult, so once it exists all three become freely reachable.
+  const maxStepReached = !fileInfo ? 1 : !proceeded ? 2 : !algoResult ? 3 : 6;
 
   function goToStep(n: number) {
     if (n <= maxStepReached) setCurrentStep(n);
   }
 
-  function nextStepHint(): string {
-    if (!fileInfo) return "Upload a spreadsheet to get started.";
-    if (!proceeded) return "Review the file below. Filtering is optional — click Proceed to preprocessing when ready.";
-    if (!algoOpen && !algoResult)
-      return "Choose a sort order if you'd like, then click Apply Algorithms — it's required before you can download.";
-    if (algoOpen && !algoResult) return "Pick a class/label column for LDA, then click Run Algorithms.";
-    if (algoResult && !downloaded)
-      return "You're ready — click Apply & Download to get your file.";
-    return "Done! Upload another file to start over, or download again anytime.";
-  }
+  const progressPct = Math.round((currentStep / steps.length) * 100);
 
   return (
     <div className="page">
-      <header className="topbar">
-        <div className="wordmark">
-          <span className="wordmark-mark">
-            <span /><span /><span /><span />
-          </span>
-          Dimension Reduction
-        </div>
-        <span className="version-tag">local · v1.0</span>
-      </header>
-
       <section className="hero">
         <div>
           <h1>
@@ -1178,30 +1231,50 @@ export default function App() {
       </section>
 
       <div className="workspace">
-        <aside className="sidebar" aria-label="Progress">
-          <p className="sidebar-title">Process</p>
-          <ol className="sidebar-steps">
+        <aside className="sidebar-dark" aria-label="Progress">
+          <div className="sidebar-logo-row">
+            <span className="sidebar-logo-badge">
+              <IconPulse />
+            </span>
+            <div>
+              <div className="sidebar-logo-title">DimReduce</div>
+              <div className="sidebar-logo-subtitle">Analysis System</div>
+            </div>
+          </div>
+
+          <div className="sidebar-progress-row">
+            <div className="sidebar-progress-label-row">
+              <span className="sidebar-progress-label">Progress</span>
+              <span className="sidebar-progress-pct">{progressPct}%</span>
+            </div>
+            <div className="sidebar-progress-track">
+              <div className="sidebar-progress-fill" style={{ width: `${progressPct}%` }} />
+            </div>
+          </div>
+
+          <ol className="sidebar-dark-steps">
             {steps.map((s) => (
               <li
                 key={s.n}
-                className={`sidebar-step ${s.status} ${s.n === currentStep ? "current" : ""} ${
+                className={`sidebar-dark-step ${s.n === currentStep ? "current" : ""} ${
                   s.n <= maxStepReached ? "reachable" : ""
-                }`}
+                } ${s.status}`}
                 onClick={() => goToStep(s.n)}
                 role={s.n <= maxStepReached ? "button" : undefined}
                 tabIndex={s.n <= maxStepReached ? 0 : undefined}
               >
-                <span className="sidebar-step-marker">
-                  {s.status === "done" ? <IconCheckCircle /> : s.n}
+                <span className="sidebar-dark-step-icon">
+                  {s.status === "done" ? <IconCheckCircle /> : s.icon}
                 </span>
-                <span className="sidebar-step-label">{s.label}</span>
+                <span className="sidebar-dark-step-label">{s.label}</span>
+                {s.n === currentStep && (
+                  <span className="sidebar-dark-step-chevron">
+                    <IconArrowRight />
+                  </span>
+                )}
               </li>
             ))}
           </ol>
-          <div className="sidebar-next">
-            <p className="sidebar-next-label">What's next</p>
-            <p className="sidebar-next-text">{nextStepHint()}</p>
-          </div>
         </aside>
 
         <nav className="stepper-mobile" aria-label="Progress">
@@ -1220,7 +1293,7 @@ export default function App() {
 
         <div className="main-content">
 
-      {currentStep === 1 && (
+      {currentStep === 1 && !fileInfo && (
       <div
         className={`card upload-card ${isDragging ? "dragging" : ""}`}
         onDragOver={(e) => {
@@ -1268,7 +1341,7 @@ export default function App() {
       </div>
       )}
 
-      {currentStep === 2 && fileInfo && (
+      {currentStep === 1 && fileInfo && (
         <div className="card dataset-card">
           <div className="dataset-header">
             <span className="dataset-title">Uploaded dataset</span>
@@ -1462,7 +1535,7 @@ export default function App() {
                 className="proceed-btn"
                 onClick={() => {
                   setProceeded(true);
-                  setCurrentStep(3);
+                  setCurrentStep(2);
                 }}
               >
                 Proceed to preprocessing <IconArrowRight />
@@ -1472,7 +1545,7 @@ export default function App() {
         </div>
       )}
 
-      {currentStep === 3 && fileInfo && proceeded && (
+      {currentStep === 2 && fileInfo && proceeded && (
         <div className="card">
           <div className="controls">
             {filterColumn !== NONE && filterValue && (
@@ -1582,7 +1655,7 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setAlgoOpen(true);
-                  setCurrentStep(4);
+                  setCurrentStep(3);
                 }}
                 disabled={algoOpen}
               >
@@ -1596,7 +1669,7 @@ export default function App() {
         </div>
       )}
 
-      {currentStep === 4 && fileInfo && (
+      {currentStep === 3 && fileInfo && (
         <div className="card algo-card">
           <div className="algo-header">
             <span className="algo-header-icon">
@@ -1623,13 +1696,14 @@ export default function App() {
                     }}
                   >
                     <option value={NONE}>Choose a column…</option>
-                    {Object.keys(fileInfo.uniqueValues)
-                      .filter((col) => col !== filterColumn || filterColumn === NONE)
-                      .map((col) => (
-                        <option key={col} value={col}>
-                          {col}
-                        </option>
-                      ))}
+                    {fileInfo &&
+                      Object.keys(fileInfo.uniqueValues)
+                        .filter((col) => col !== filterColumn || filterColumn === NONE)
+                        .map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
                   </select>
                 </label>
               </div>
@@ -1649,7 +1723,7 @@ export default function App() {
                   className="secondary small ghost"
                   onClick={() => {
                     resetAlgorithms();
-                    setCurrentStep(3);
+                    setCurrentStep(2);
                   }}
                 >
                   Cancel
@@ -1732,21 +1806,11 @@ export default function App() {
               </div>
 
               <div className="algo-actions">
-                <button type="button" className="secondary" onClick={() => setCurrentStep(3)}>
+                <button type="button" className="secondary" onClick={() => setCurrentStep(2)}>
                   <IconArrowLeft /> Back
                 </button>
-                <button type="button" className="secondary" onClick={() => setAnalysisOpen((v) => !v)}>
-                  {analysisOpen ? "Hide Analysis" : "Visualize & Analysis"}
-                </button>
-              </div>
-
-              {analysisOpen && (
-                <VisualizeAndAnalysis algoResult={algoResult} />
-              )}
-
-              <div className="proceed-row">
-                <button type="button" className="proceed-btn" onClick={() => setCurrentStep(5)}>
-                  Continue to download <IconArrowRight />
+                <button type="button" className="proceed-btn" onClick={() => setCurrentStep(4)}>
+                  Continue to Visualize &amp; Analysis <IconArrowRight />
                 </button>
               </div>
             </>
@@ -1754,15 +1818,43 @@ export default function App() {
         </div>
       )}
 
+      {currentStep === 4 && fileInfo && algoResult && (
+        <div className="card algo-card">
+          <VisualizeAnalysisSection algoResult={algoResult} />
+          <div className="algo-actions" style={{ marginTop: 18 }}>
+            <button type="button" className="secondary" onClick={() => setCurrentStep(3)}>
+              <IconArrowLeft /> Back
+            </button>
+            <button type="button" className="proceed-btn" onClick={() => setCurrentStep(5)}>
+              Continue to Report <IconArrowRight />
+            </button>
+          </div>
+        </div>
+      )}
+
       {currentStep === 5 && fileInfo && algoResult && (
+        <div className="card algo-card">
+          <ReportSection algoResult={algoResult} />
+          <div className="algo-actions" style={{ marginTop: 18 }}>
+            <button type="button" className="secondary" onClick={() => setCurrentStep(4)}>
+              <IconArrowLeft /> Back
+            </button>
+            <button type="button" className="proceed-btn" onClick={() => setCurrentStep(6)}>
+              Continue to Export <IconArrowRight />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {currentStep === 6 && fileInfo && algoResult && (
         <div className="card download-card">
           <div className="algo-header">
             <span className="algo-header-icon">
               <IconDownload />
             </span>
             <div>
-              <h2 className="algo-title">Download</h2>
-              <p className="meta">Your file is ready, with everything below applied.</p>
+              <h2 className="algo-title">Export</h2>
+              <p className="meta">Your file is ready, with everything above applied.</p>
             </div>
           </div>
 
