@@ -1593,15 +1593,15 @@ export default function App() {
             </div>
             <div className="stat-card">
               <span className="stat-label">Start time</span>
-              <span className="stat-value">{processStartTime ? formatTimestamp(processStartTime) : "—"}</span>
+              <span className="stat-value compact">{processStartTime ? formatTimestamp(processStartTime) : "—"}</span>
             </div>
             <div className="stat-card">
               <span className="stat-label">End time</span>
-              <span className="stat-value">{processEndTime ? formatTimestamp(processEndTime) : "—"}</span>
+              <span className="stat-value compact">{processEndTime ? formatTimestamp(processEndTime) : "—"}</span>
             </div>
             <div className="stat-card highlight">
               <span className="stat-label">Process duration</span>
-              <span className="stat-value">
+              <span className="stat-value compact">
                 {processStartTime && processEndTime
                   ? formatDuration(processEndTime - processStartTime)
                   : "—"}
