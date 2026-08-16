@@ -557,7 +557,7 @@ input[type="file"] {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -569,6 +569,7 @@ input[type="file"] {
   flex-direction: column;
   gap: 2px;
   background: var(--surface);
+  min-width: 0;
 }
 
 .stat-card.highlight {
@@ -588,6 +589,12 @@ input[type="file"] {
   font-family: var(--font-mono);
   font-size: 1.15rem;
   font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.stat-value.compact {
+  font-size: 0.88rem;
+  white-space: nowrap;
 }
 
 .stat-card.highlight .stat-value {
