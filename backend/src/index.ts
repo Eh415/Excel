@@ -492,6 +492,66 @@ app.post("/api/apply-algorithms", (req: Request, res: Response) => {
   }
 });
 
+// POST /api/full-data - body: { fileId }
+// Returns the complete cleaned dataset (every row, not just a 5-row sample) along with
+// missing-value detection: which fields are blank on each row, and a per-column tally.
+// Used by the "Preview Dataset" panel so the user can see everything they uploaded, plus
+// exactly which records/fields are incomplete, before moving on to preprocessing.
+app.post("/api/full-data", (req: Request, res: Response) => {
+  const { fileId } = req.body as { fileId?: string };
+
+  if (!fileId) {
+    return res.status(400).json({ error: "fileId is required." });
+  }
+
+  const stored = fileStore.get(fileId);
+  if (!stored) {
+    return res.status(404).json({ error: "File not found or has expired. Please re-upload." });
+  }
+
+  try {
+    const sheet = stored.workbook.Sheets[stored.sheetName];
+    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "The sheet has no data rows." });
+    }
+
+    const columns = Object.keys(rows[0]);
+    const missingByColumn: Record<string, number> = {};
+    for (const col of columns) missingByColumn[col] = 0;
+
+    let totalMissingCells = 0;
+    let incompleteRowCount = 0;
+
+    const dataRows = rows.map((row, i) => {
+      const missingFields: string[] = [];
+      for (const col of columns) {
+        const val = row[col];
+        if (val === "" || val === null || val === undefined) {
+          missingFields.push(col);
+          missingByColumn[col]++;
+          totalMissingCells++;
+        }
+      }
+      if (missingFields.length > 0) incompleteRowCount++;
+      return { index: i, data: row, missingFields, isIncomplete: missingFields.length > 0 };
+    });
+
+    res.json({
+      columns,
+      rows: dataRows,
+      rowCount: rows.length,
+      missingByColumn,
+      totalMissingCells,
+      incompleteRowCount,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Something went wrong while loading the dataset preview." });
+  }
+});
+
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
