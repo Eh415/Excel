@@ -22,6 +22,36 @@ type UploadResponse = {
   importNotes: ImportNotes;
 };
 
+type FullDataRow = {
+  index: number;
+  data: Record<string, unknown>;
+  missingFields: string[];
+  isIncomplete: boolean;
+};
+
+type FullDataResponse = {
+  columns: string[];
+  rows: FullDataRow[];
+  rowCount: number;
+  missingByColumn: Record<string, number>;
+  totalMissingCells: number;
+  incompleteRowCount: number;
+};
+
+// ms since epoch -> "HH:MM:SS.mmm" in the user's local time, for Start/End Time display.
+function formatTimestamp(ms: number): string {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString([], { hour12: false });
+  const millis = String(d.getMilliseconds()).padStart(3, "0");
+  return `${time}.${millis}`;
+}
+
+// ms duration -> "412 ms" for sub-second, or "2.34 s" once it crosses a second.
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
 function IconUpload() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -997,6 +1027,18 @@ export default function App() {
   const [downloadFormat, setDownloadFormat] = useState<"xlsx" | "pdf" | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
 
+  // Start/End Time + Process Duration — timed client-side around the whole upload/import
+  // pipeline (network + parsing), not just server-side parse time like fileInfo.runtimeMs.
+  const [processStartTime, setProcessStartTime] = useState<number | null>(null);
+  const [processEndTime, setProcessEndTime] = useState<number | null>(null);
+
+  // Full dataset preview (every uploaded record, with missing-value detection), loaded on
+  // demand when the user opens the preview panel — the upload response itself only carries
+  // a 5-row sample to keep that payload small.
+  const [fullData, setFullData] = useState<FullDataResponse | null>(null);
+  const [fullDataStatus, setFullDataStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [fullDataError, setFullDataError] = useState<string>("");
+
   async function runAlgorithmsRequest() {
     if (!fileInfo || labelColumn === NONE) return;
     setAlgoStatus("running");
@@ -1037,12 +1079,50 @@ export default function App() {
     setDownloaded(false);
   }
 
+  async function loadFullPreview() {
+    if (!fileInfo) return;
+    setFullDataStatus("loading");
+    setFullDataError("");
+    try {
+      const res = await fetch(`${API_BASE}/full-data`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: fileInfo.fileId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Could not load the dataset preview.");
+      }
+      setFullData(data);
+      setFullDataStatus("idle");
+    } catch (err) {
+      setFullDataStatus("error");
+      setFullDataError(err instanceof Error ? err.message : "Could not load the dataset preview.");
+    }
+  }
+
+  function togglePreview() {
+    setPreviewOpen((v) => {
+      const next = !v;
+      if (next && !fullData && fullDataStatus !== "loading") {
+        loadFullPreview();
+      }
+      return next;
+    });
+  }
+
   async function processFile(file: File) {
+    const processStart = Date.now();
+    setProcessStartTime(processStart);
+    setProcessEndTime(null);
     setStatus("uploading");
     setErrorMsg("");
     setFileInfo(null);
     setProceeded(false);
     setPreviewOpen(false);
+    setFullData(null);
+    setFullDataStatus("idle");
+    setFullDataError("");
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
@@ -1075,6 +1155,8 @@ export default function App() {
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setProcessEndTime(Date.now());
     }
   }
 
@@ -1155,11 +1237,16 @@ export default function App() {
     setErrorMsg("");
     setProceeded(false);
     setPreviewOpen(false);
+    setFullData(null);
+    setFullDataStatus("idle");
+    setFullDataError("");
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
     setSortPreviewPoints(null);
     setSortPreviewMeta(null);
+    setProcessStartTime(null);
+    setProcessEndTime(null);
     resetAlgorithms();
     setCurrentStep(1);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1360,8 +1447,9 @@ export default function App() {
               <button
                 type="button"
                 className="icon-btn"
-                onClick={() => setPreviewOpen((v) => !v)}
-                aria-label={previewOpen ? "Hide preview" : "Show preview"}
+                onClick={togglePreview}
+                aria-label={previewOpen ? "Hide dataset preview" : "Preview full dataset"}
+                title={previewOpen ? "Hide dataset preview" : "Preview full dataset"}
               >
                 <IconEye />
               </button>
@@ -1503,28 +1591,90 @@ export default function App() {
               <span className="stat-label">Runtime</span>
               <span className="stat-value">{fileInfo.runtimeMs} ms</span>
             </div>
+            <div className="stat-card">
+              <span className="stat-label">Start time</span>
+              <span className="stat-value">{processStartTime ? formatTimestamp(processStartTime) : "—"}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">End time</span>
+              <span className="stat-value">{processEndTime ? formatTimestamp(processEndTime) : "—"}</span>
+            </div>
+            <div className="stat-card highlight">
+              <span className="stat-label">Process duration</span>
+              <span className="stat-value">
+                {processStartTime && processEndTime
+                  ? formatDuration(processEndTime - processStartTime)
+                  : "—"}
+              </span>
+            </div>
           </div>
 
           {previewOpen && (
-            <div className="preview-wrap" style={{ marginTop: 16 }}>
-              <table className="preview">
-                <thead>
-                  <tr>
-                    {fileInfo.columns.map((col) => (
-                      <th key={col}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {fileInfo.preview.map((row, i) => (
-                    <tr key={i}>
-                      {fileInfo.columns.map((col) => (
-                        <td key={col}>{String(row[col])}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="dataset-preview-panel" style={{ marginTop: 16 }}>
+              {fullDataStatus === "loading" && <p className="status">Loading the full dataset…</p>}
+              {fullDataStatus === "error" && <p className="status error">{fullDataError}</p>}
+
+              {fullData && fullDataStatus === "idle" && (
+                <>
+                  <div className="missing-summary">
+                    <span className="missing-summary-item">
+                      <strong>{fullData.rowCount}</strong> record{fullData.rowCount === 1 ? "" : "s"} total
+                    </span>
+                    <span
+                      className={`missing-summary-item ${fullData.incompleteRowCount > 0 ? "warn" : "ok"}`}
+                    >
+                      <strong>{fullData.incompleteRowCount}</strong> record
+                      {fullData.incompleteRowCount === 1 ? "" : "s"} with missing values
+                    </span>
+                    <span
+                      className={`missing-summary-item ${fullData.totalMissingCells > 0 ? "warn" : "ok"}`}
+                    >
+                      <strong>{fullData.totalMissingCells}</strong> missing cell
+                      {fullData.totalMissingCells === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  {fullData.totalMissingCells > 0 && (
+                    <div className="missing-by-column">
+                      {fullData.columns
+                        .filter((col) => fullData.missingByColumn[col] > 0)
+                        .map((col) => (
+                          <span key={col} className="missing-chip">
+                            {col}: {fullData.missingByColumn[col]} missing
+                          </span>
+                        ))}
+                    </div>
+                  )}
+
+                  <div className="preview-wrap preview-wrap-scroll">
+                    <table className="preview">
+                      <thead>
+                        <tr>
+                          <th className="row-index-col">#</th>
+                          {fullData.columns.map((col) => (
+                            <th key={col}>{col}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fullData.rows.map((row) => (
+                          <tr key={row.index} className={row.isIncomplete ? "row-incomplete" : ""}>
+                            <td className="row-index-col">{row.index + 1}</td>
+                            {fullData.columns.map((col) => {
+                              const missing = row.missingFields.includes(col);
+                              return (
+                                <td key={col} className={missing ? "cell-missing" : ""}>
+                                  {missing ? <span className="missing-tag">missing</span> : String(row.data[col])}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
