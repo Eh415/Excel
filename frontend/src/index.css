@@ -557,7 +557,7 @@ input[type="file"] {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
 }
 
@@ -731,6 +731,84 @@ table.preview th {
 
 table.preview tr:last-child td {
   border-bottom: none;
+}
+
+/* ---------- Full dataset preview / missing values ---------- */
+
+.preview-wrap-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.preview-wrap-scroll table.preview thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.row-index-col {
+  color: var(--ink-soft);
+  font-weight: 400;
+  text-align: right;
+  width: 1%;
+}
+
+.dataset-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.missing-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.missing-summary-item strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+
+.missing-summary-item.warn strong {
+  color: var(--error);
+}
+
+.missing-summary-item.ok strong {
+  color: var(--pine-dark);
+}
+
+.missing-by-column {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.missing-chip {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fbe9e5;
+  color: var(--error);
+  border: 1px solid #f0c9c0;
+}
+
+tr.row-incomplete td {
+  background: #fdf6f4;
+}
+
+td.cell-missing {
+  background: #fbe9e5;
+}
+
+.missing-tag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--error);
+  font-style: italic;
 }
 
 /* ---------- Actions / buttons ---------- */
