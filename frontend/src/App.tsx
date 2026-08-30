@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 type ImportNotes = {
   headerRowsSkipped: number;
@@ -207,6 +207,121 @@ function IconTarget() {
 const API_BASE = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api`
   : "/api";
+
+// ---------- Algorithm processing simulation ----------
+// The real /apply-algorithms call is a single blocking server request with no progress
+// events, so there's nothing to report mid-flight. This walks through the actual algorithmic
+// stages PCA and LDA go through on a fixed clock, purely so the user sees *what* the server
+// is doing rather than a bare spinner. It loops back to the top if the request runs long
+// (e.g. a cold Render instance waking up) instead of stalling on the last step.
+type SimStepState = "done" | "active" | "upcoming";
+
+const PCA_SIM_STEPS = [
+  "Detecting numeric columns",
+  "Centering & scaling data",
+  "Computing covariance matrix",
+  "Extracting eigenvectors",
+  "Projecting onto PC1 / PC2",
+];
+
+const LDA_SIM_STEPS = [
+  "Grouping rows by class label",
+  "Computing within-class scatter",
+  "Computing between-class scatter",
+  "Solving the eigenproblem",
+  "Validating on a held-out split",
+];
+
+function SimTrack({
+  label,
+  icon,
+  accent,
+  steps,
+  activeIndex,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  accent: "pine" | "clay";
+  steps: string[];
+  activeIndex: number;
+}) {
+  return (
+    <div className={`algo-sim-track accent-${accent}`}>
+      <div className="algo-sim-track-head">
+        <span className={`algo-icon ${accent} small`}>{icon}</span>
+        <span className="algo-sim-track-title">{label}</span>
+      </div>
+      <ul className="algo-sim-steps">
+        {steps.map((step, i) => {
+          const state: SimStepState = i < activeIndex ? "done" : i === activeIndex ? "active" : "upcoming";
+          return (
+            <li key={step} className={`algo-sim-step ${state}`}>
+              <span className="algo-sim-marker">
+                {state === "done" ? <IconCheckCircle /> : <span className="algo-sim-dot" />}
+              </span>
+              <span className="algo-sim-step-label">{step}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// Isolated into its own component with its own local state/timers on purpose — same fix as
+// the Step4Offload white-screen bug: frequent interval-driven state updates need to live
+// below the root App component, not on it, or a high update frequency can lock up the page.
+function AlgorithmSimulation({ rowsHint }: { rowsHint?: number }) {
+  const [pcaStep, setPcaStep] = useState(0);
+  const [ldaStep, setLdaStep] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    startRef.current = Date.now();
+    setPcaStep(0);
+    setLdaStep(0);
+    setElapsedMs(0);
+
+    const pcaTimer = setInterval(() => {
+      setPcaStep((s) => (s + 1) % PCA_SIM_STEPS.length);
+    }, 900);
+    const ldaTimer = setInterval(() => {
+      setLdaStep((s) => (s + 1) % LDA_SIM_STEPS.length);
+    }, 1050);
+    const clockTimer = setInterval(() => {
+      setElapsedMs(Date.now() - startRef.current);
+    }, 100);
+
+    return () => {
+      clearInterval(pcaTimer);
+      clearInterval(ldaTimer);
+      clearInterval(clockTimer);
+    };
+  }, []);
+
+  const slow = elapsedMs > 8000;
+
+  return (
+    <div className="algo-sim">
+      <div className="algo-sim-clock">
+        <span className="algo-sim-pulse" />
+        <span>
+          {formatDuration(elapsedMs)} elapsed{rowsHint ? ` · ${rowsHint} rows` : ""}
+        </span>
+      </div>
+      <div className="algo-sim-tracks">
+        <SimTrack label="PCA" icon={<IconSparkle />} accent="pine" steps={PCA_SIM_STEPS} activeIndex={pcaStep} />
+        <SimTrack label="LDA" icon={<IconTarget />} accent="clay" steps={LDA_SIM_STEPS} activeIndex={ldaStep} />
+      </div>
+      <p className="meta small algo-sim-hint">
+        {slow
+          ? "Still working — free-tier Render backends can take 30–60s to wake up from a cold start."
+          : "Running the real PCA/LDA pipeline on the server — this usually takes just a few seconds."}
+      </p>
+    </div>
+  );
+}
 
 const NONE = "__none__";
 
@@ -1879,6 +1994,7 @@ export default function App() {
                   Cancel
                 </button>
               </div>
+              {algoStatus === "running" && <AlgorithmSimulation rowsHint={fileInfo?.rowsAfter} />}
               {algoStatus === "error" && <p className="status error">{algoError}</p>}
             </div>
           )}
