@@ -1186,6 +1186,29 @@ button.small.ghost:hover:not(:disabled) {
   margin-bottom: 10px;
 }
 
+.algo-anim-wrap {
+  border: 1px solid var(--rule-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 6px 8px 4px;
+  margin-bottom: 12px;
+}
+
+.algo-anim-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 260 / 200;
+}
+
+.algo-anim-caption {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
 .algo-icon.small {
   width: 24px;
   height: 24px;
