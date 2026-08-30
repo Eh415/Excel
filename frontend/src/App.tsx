@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import AlgorithmSimulationModule from "./AlgorithmSimulationModule";
 
 type ImportNotes = {
   headerRowsSkipped: number;
@@ -1312,6 +1313,7 @@ export default function App() {
   }
 
   const [algoOpen, setAlgoOpen] = useState(false);
+  const [showSimModule, setShowSimModule] = useState(false);
   const [labelColumn, setLabelColumn] = useState<string>(NONE);
   const [algoStatus, setAlgoStatus] = useState<"idle" | "running" | "error">("idle");
   const [algoError, setAlgoError] = useState<string>("");
@@ -1655,6 +1657,10 @@ export default function App() {
               </li>
             ))}
           </ol>
+
+          <button type="button" className="sidebar-sim-link" onClick={() => setShowSimModule(true)}>
+            <IconSparkle /> How PCA &amp; LDA work
+          </button>
         </aside>
 
         <nav className="stepper-mobile" aria-label="Progress">
@@ -2122,6 +2128,9 @@ export default function App() {
               <h2 className="algo-title">Apply Algorithms</h2>
               <p className="meta">Run PCA and LDA dimensionality reduction on the numeric columns.</p>
             </div>
+            <button type="button" className="algo-header-sim-btn" onClick={() => setShowSimModule(true)}>
+              How it works
+            </button>
           </div>
 
           {!algoResult && (
@@ -2346,6 +2355,7 @@ export default function App() {
       )}
         </div>
       </div>
+      {showSimModule && <AlgorithmSimulationModule onClose={() => setShowSimModule(false)} />}
     </div>
   );
 }
