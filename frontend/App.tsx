@@ -788,7 +788,7 @@ function PcaLdaDashboard({
           <span className="pca-lda-stat-value clay">{ldaTotal.toFixed(1)}%</span>
         </div>
         <div className="pca-lda-stat">
-          <span className="pca-lda-stat-label">LDA accuracy</span>
+          <span className="pca-lda-stat-label">LDA VARIANCE</span>
           <span className="pca-lda-stat-value clay">{ldaAccuracy !== null ? `${ldaAccuracy.toFixed(1)}%` : "—"}</span>
         </div>
         <div className="pca-lda-stat">
