@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import AlgorithmSimulationModule from "./AlgorithmSimulationModule";
+import MemoryUsageBadge from "./MemoryUsageBadge";
+import DuplicateHistoryPanel from "./DuplicateHistoryPanel";
 
 type ImportNotes = {
   headerRowsSkipped: number;
@@ -34,6 +36,9 @@ type FullDataResponse = {
   columns: string[];
   rows: FullDataRow[];
   rowCount: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
   missingByColumn: Record<string, number>;
   totalMissingCells: number;
   incompleteRowCount: number;
@@ -1333,6 +1338,10 @@ export default function App() {
   const [fullData, setFullData] = useState<FullDataResponse | null>(null);
   const [fullDataStatus, setFullDataStatus] = useState<"idle" | "loading" | "error">("idle");
   const [fullDataError, setFullDataError] = useState<string>("");
+  const [fullDataLoadingMore, setFullDataLoadingMore] = useState(false);
+
+  // Duplicate Records History — reviewing/keeping/deleting exact-duplicate rows found on upload.
+  const [dupHistoryOpen, setDupHistoryOpen] = useState(false);
 
   async function runAlgorithmsRequest() {
     if (!fileInfo || labelColumn === NONE) return;
@@ -1374,25 +1383,33 @@ export default function App() {
     setDownloaded(false);
   }
 
-  async function loadFullPreview() {
+  const FULL_DATA_PAGE_SIZE = 2000;
+
+  async function loadFullPreview(append = false) {
     if (!fileInfo) return;
-    setFullDataStatus("loading");
+    const offset = append && fullData ? fullData.rows.length : 0;
+    setFullDataStatus(append ? "idle" : "loading");
+    if (append) setFullDataLoadingMore(true);
     setFullDataError("");
     try {
       const res = await fetch(`${API_BASE}/full-data`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: fileInfo.fileId }),
+        body: JSON.stringify({ fileId: fileInfo.fileId, offset, limit: FULL_DATA_PAGE_SIZE }),
       });
-      const data = await res.json();
+      const data: FullDataResponse = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Could not load the dataset preview.");
+        throw new Error((data as unknown as { error?: string }).error || "Could not load the dataset preview.");
       }
-      setFullData(data);
+      setFullData((prev) =>
+        append && prev ? { ...data, rows: [...prev.rows, ...data.rows] } : data
+      );
       setFullDataStatus("idle");
     } catch (err) {
       setFullDataStatus("error");
       setFullDataError(err instanceof Error ? err.message : "Could not load the dataset preview.");
+    } finally {
+      setFullDataLoadingMore(false);
     }
   }
 
@@ -1418,6 +1435,7 @@ export default function App() {
     setFullData(null);
     setFullDataStatus("idle");
     setFullDataError("");
+    setDupHistoryOpen(false);
     setFilteredCount(null);
     setFilterStatus("idle");
     setFilterError("");
@@ -1661,6 +1679,8 @@ export default function App() {
           <button type="button" className="sidebar-sim-link" onClick={() => setShowSimModule(true)}>
             <IconSparkle /> How PCA &amp; LDA work
           </button>
+
+          <MemoryUsageBadge />
         </aside>
 
         <nav className="stepper-mobile" aria-label="Progress">
@@ -1881,6 +1901,15 @@ export default function App() {
             <div className="stat-card">
               <span className="stat-label">Duplicates removed</span>
               <span className="stat-value">{fileInfo.duplicatesRemoved}</span>
+              {fileInfo.duplicatesRemoved > 0 && (
+                <button
+                  type="button"
+                  className="secondary small ghost stat-card-action"
+                  onClick={() => setDupHistoryOpen(true)}
+                >
+                  Review
+                </button>
+              )}
             </div>
             <div className="stat-card">
               <span className="stat-label">Null / blank cells</span>
@@ -1971,6 +2000,24 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  <div className="preview-pagination">
+                    <span className="preview-pagination-count">
+                      Showing {fullData.rows.length.toLocaleString()} of {fullData.rowCount.toLocaleString()} records
+                    </span>
+                    {fullData.hasMore && (
+                      <button
+                        type="button"
+                        className="secondary small"
+                        disabled={fullDataLoadingMore}
+                        onClick={() => loadFullPreview(true)}
+                      >
+                        {fullDataLoadingMore
+                          ? "Loading…"
+                          : `Load next ${Math.min(FULL_DATA_PAGE_SIZE, fullData.rowCount - fullData.rows.length).toLocaleString()} rows`}
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -2356,6 +2403,16 @@ export default function App() {
         </div>
       </div>
       {showSimModule && <AlgorithmSimulationModule onClose={() => setShowSimModule(false)} />}
+      {dupHistoryOpen && fileInfo && (
+        <DuplicateHistoryPanel
+          fileId={fileInfo.fileId}
+          columns={fileInfo.columns}
+          onClose={() => setDupHistoryOpen(false)}
+          onRowsChanged={(rowsAfter) =>
+            setFileInfo((prev) => (prev ? { ...prev, rowsAfter } : prev))
+          }
+        />
+      )}
     </div>
   );
 }
