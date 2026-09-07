@@ -1072,7 +1072,7 @@ function VisualizeAnalysisSection({ algoResult }: { algoResult: AlgorithmsRespon
           <span className="pca-lda-stat-value pine">{d.pcaTotal.toFixed(1)}%</span>
         </div>
         <div className="pca-lda-stat">
-          <span className="pca-lda-stat-label">LDA accuracy</span>
+          <span className="pca-lda-stat-label">LDA VARIANCE</span>
           <span className="pca-lda-stat-value clay">{d.ldaAccuracy !== null ? `${d.ldaAccuracy.toFixed(1)}%` : "—"}</span>
         </div>
       </div>
