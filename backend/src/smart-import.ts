@@ -63,6 +63,97 @@ function looksLikeTimeColumn(label: string, samples: unknown[]): boolean {
   return plausible.length / nums.length > 0.8;
 }
 
+// --- Flexible "Column / Value" (long-format) upload support -------------------------------
+// Some exports describe one record per *block of rows* instead of one record per row: a
+// "Column" (or "Field"/"Attribute"/"Key") header names an attribute, a "Value" (or "Data") header
+// holds that attribute's value, and consecutive rows are stacked vertically until the same
+// attribute name repeats (or a blank row appears), which marks the start of the next record.
+// This lets the system accept datasets with different fields per upload without the sheet
+// needing to already be in a wide, one-row-per-record table.
+const KEY_HEADER_ALIASES = ["column", "field", "attribute", "key", "name", "label", "property"];
+const VALUE_HEADER_ALIASES = ["value", "data", "amount", "val", "entry"];
+
+function isKeyValueHeaderPair(a: string, b: string): boolean {
+  const an = a.trim().toLowerCase();
+  const bn = b.trim().toLowerCase();
+  return KEY_HEADER_ALIASES.includes(an) && VALUE_HEADER_ALIASES.includes(bn);
+}
+
+// Parses a "Column, Value" stacked-record sheet into normal wide rows. Returns null if the
+// sheet doesn't actually contain at least two distinct records worth of data — in that case the
+// caller falls back to treating it as an ordinary (possibly single-record) two-column table.
+function parseKeyValueFormat(raw: unknown[][]): SmartImportResult | null {
+  const headerRow = raw[0] ?? [];
+  const filledIdx: number[] = [];
+  for (let c = 0; c < headerRow.length; c++) {
+    if (!isBlank(headerRow[c])) filledIdx.push(c);
+  }
+  if (filledIdx.length !== 2) return null;
+  const [keyCol, valCol] = filledIdx;
+  if (!isKeyValueHeaderPair(String(headerRow[keyCol]), String(headerRow[valCol]))) return null;
+
+  const records: Record<string, unknown>[] = [];
+  const columnOrder: string[] = [];
+  const columnSet = new Set<string>();
+  let current: Record<string, unknown> = {};
+  let currentKeys = new Set<string>();
+
+  const commitCurrent = () => {
+    if (Object.keys(current).length > 0) records.push(current);
+    current = {};
+    currentKeys = new Set<string>();
+  };
+
+  for (let r = 1; r < raw.length; r++) {
+    const row = raw[r];
+    const rawKey = row[keyCol];
+    const rawVal = row[valCol];
+    const key = isBlank(rawKey) ? "" : String(rawKey).trim();
+
+    if (key === "") {
+      // Blank key: either a spacer between records, or (harmlessly) a fully blank trailing row.
+      commitCurrent();
+      continue;
+    }
+
+    if (currentKeys.has(key)) {
+      // This attribute already appeared in the record being built — a repeat means a new
+      // record has begun (report exports rarely list the same field twice per record).
+      commitCurrent();
+    }
+
+    current[key] = isBlank(rawVal) ? "" : rawVal;
+    currentKeys.add(key);
+    if (!columnSet.has(key)) {
+      columnSet.add(key);
+      columnOrder.push(key);
+    }
+  }
+  commitCurrent();
+
+  // Require at least two stacked records — a single Column/Value block is more likely a
+  // one-off settings table than a "multiple records" dataset, so leave that to the normal path.
+  if (records.length < 2 || columnOrder.length === 0) return null;
+
+  // Normalize every record to carry every column seen anywhere in the sheet (blank if a given
+  // record didn't include it), so sorting/filtering/PCA downstream can rely on a consistent shape.
+  const rows = records.map((rec) => {
+    const row: Record<string, unknown> = {};
+    for (const col of columnOrder) row[col] = rec[col] ?? "";
+    return row;
+  });
+
+  return {
+    rows,
+    columns: columnOrder,
+    headerRowsSkipped: 1,
+    groupsDetected: [],
+    dividerRowsRemoved: 0,
+    subtotalRowsRemoved: 0,
+    columnsRealigned: [],
+  };
+}
+
 /**
  * Cleans up "formatted report" style spreadsheet exports: title/metadata rows before the
  * real header, header labels that don't line up with their data column (common when a
@@ -72,6 +163,9 @@ function looksLikeTimeColumn(label: string, samples: unknown[]): boolean {
  *
  * For an already-clean spreadsheet (header in row 1, one value per column, no dividers or
  * subtotals) this is a no-op: it produces the same rows a plain parse would.
+ *
+ * It also recognizes the "Column / Value" long-format layout described above and pivots it
+ * into normal wide rows before any of the report-cleanup logic runs.
  */
 export function smartImport(sheet: XLSX.WorkSheet): SmartImportResult {
   const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
@@ -91,6 +185,9 @@ export function smartImport(sheet: XLSX.WorkSheet): SmartImportResult {
       columnsRealigned: [],
     };
   }
+
+  const keyValueResult = parseKeyValueFormat(raw);
+  if (keyValueResult) return keyValueResult;
 
   // --- 1. Find the real header row: the row with the most non-blank cells among the first
   // few rows. Title/address/date-range rows in report templates typically have 1-2 filled

@@ -3,6 +3,7 @@ import cors from "cors";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import crypto from "crypto";
+import os from "os";
 import { runAlgorithms, AlgorithmError } from "./algorithms";
 import { smartImport } from "./smart-import";
 import { generatePdf } from "./pdf-export";
@@ -15,9 +16,14 @@ app.use(express.json());
 
 const ALLOWED_EXTENSIONS = /\.(xlsx|xls|csv)$/i;
 
+// Raised well past the original 25MB so hundreds-of-thousands-of-rows workbooks (the kind
+// used for local large-dataset testing / a live defense) don't get rejected outright.
+// Override with MAX_UPLOAD_MB if an even larger ceiling is needed.
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 200;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_EXTENSIONS.test(file.originalname)) {
       cb(null, true);
@@ -48,6 +54,18 @@ type StoredFile = {
 };
 const fileStore = new Map<string, StoredFile>();
 
+function getStoredRows(stored: StoredFile): Record<string, unknown>[] {
+  const sheet = stored.workbook.Sheets[stored.sheetName];
+  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
+}
+
+function setStoredRows(stored: StoredFile, rows: Record<string, unknown>[], columns: string[]) {
+  const sheet = XLSX.utils.json_to_sheet(rows, { header: columns });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, stored.sheetName);
+  stored.workbook = workbook;
+}
+
 // Clean up files older than 30 minutes
 const FILE_TTL_MS = 30 * 60 * 1000;
 setInterval(() => {
@@ -56,6 +74,29 @@ setInterval(() => {
     if (now - entry.uploadedAt > FILE_TTL_MS) {
       fileStore.delete(id);
     }
+  }
+}, 5 * 60 * 1000);
+
+// --- Duplicate Records History -------------------------------------------------------------
+// Whenever /api/upload strips exact-duplicate rows out of a sheet, each one is kept here so the
+// user can look back at what was removed and decide, per record, whether to permanently discard
+// it or restore it into the active dataset. Entries persist for as long as the underlying file
+// does (same TTL/cleanup as fileStore, keyed by the same fileId).
+type DuplicateStatus = "removed" | "kept";
+
+type DuplicateEntry = {
+  id: string;
+  row: Record<string, unknown>;
+  detectedAt: number;
+  status: DuplicateStatus;
+  resolvedAt: number | null;
+};
+
+const duplicateHistoryStore = new Map<string, DuplicateEntry[]>();
+
+setInterval(() => {
+  for (const id of duplicateHistoryStore.keys()) {
+    if (!fileStore.has(id)) duplicateHistoryStore.delete(id);
   }
 }, 5 * 60 * 1000);
 
@@ -81,12 +122,24 @@ app.post("/api/upload", handleUpload, (req: Request, res: Response) => {
 
     const rowsBefore = rawRows.length;
 
-    // Drop exact duplicate rows (every column value matches another row).
+    // Drop exact duplicate rows (every column value matches another row), and keep a record of
+    // each one removed so it can be reviewed later via the Duplicate Records History panel.
     const seenRowKeys = new Set<string>();
     const rows: Record<string, unknown>[] = [];
+    const duplicateEntries: DuplicateEntry[] = [];
+    const detectedAt = Date.now();
     for (const row of rawRows) {
       const key = JSON.stringify(row);
-      if (seenRowKeys.has(key)) continue;
+      if (seenRowKeys.has(key)) {
+        duplicateEntries.push({
+          id: crypto.randomUUID(),
+          row,
+          detectedAt,
+          status: "removed",
+          resolvedAt: null,
+        });
+        continue;
+      }
       seenRowKeys.add(key);
       rows.push(row);
     }
@@ -116,6 +169,7 @@ app.post("/api/upload", handleUpload, (req: Request, res: Response) => {
       originalName: req.file.originalname,
       uploadedAt: Date.now(),
     });
+    duplicateHistoryStore.set(fileId, duplicateEntries);
 
     // For each column, collect its distinct values (capped) so the frontend
     // can offer a "filter by value" dropdown, e.g. Gender -> ["Male", "Female"].
@@ -492,13 +546,21 @@ app.post("/api/apply-algorithms", (req: Request, res: Response) => {
   }
 });
 
-// POST /api/full-data - body: { fileId }
-// Returns the complete cleaned dataset (every row, not just a 5-row sample) along with
-// missing-value detection: which fields are blank on each row, and a per-column tally.
-// Used by the "Preview Dataset" panel so the user can see everything they uploaded, plus
-// exactly which records/fields are incomplete, before moving on to preprocessing.
+// POST /api/full-data - body: { fileId, limit?, offset? }
+// Returns the cleaned dataset along with missing-value detection: which fields are blank on
+// each row, and a per-column tally. Used by the "Preview Dataset" panel so the user can see
+// everything they uploaded, plus exactly which records/fields are incomplete.
+//
+// `limit`/`offset` page through the row list — this matters for local testing with very large
+// (hundreds-of-thousands-of-rows) datasets, where returning every row in one response would be
+// slow to serialize and would freeze the browser trying to render it. missingByColumn,
+// totalMissingCells, and incompleteRowCount are always computed over the FULL dataset regardless
+// of the requested page, so those summary numbers stay accurate as the user pages through.
+const FULL_DATA_DEFAULT_LIMIT = 2000;
+const FULL_DATA_MAX_LIMIT = 20000;
+
 app.post("/api/full-data", (req: Request, res: Response) => {
-  const { fileId } = req.body as { fileId?: string };
+  const { fileId, limit, offset } = req.body as { fileId?: string; limit?: number; offset?: number };
 
   if (!fileId) {
     return res.status(400).json({ error: "fileId is required." });
@@ -510,8 +572,7 @@ app.post("/api/full-data", (req: Request, res: Response) => {
   }
 
   try {
-    const sheet = stored.workbook.Sheets[stored.sheetName];
-    const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const rows = getStoredRows(stored);
 
     if (rows.length === 0) {
       return res.status(400).json({ error: "The sheet has no data rows." });
@@ -524,7 +585,16 @@ app.post("/api/full-data", (req: Request, res: Response) => {
     let totalMissingCells = 0;
     let incompleteRowCount = 0;
 
-    const dataRows = rows.map((row, i) => {
+    const safeOffset = Math.max(0, Number.isFinite(offset) ? Number(offset) : 0);
+    const safeLimit = Math.min(
+      FULL_DATA_MAX_LIMIT,
+      Math.max(1, Number.isFinite(limit) ? Number(limit) : FULL_DATA_DEFAULT_LIMIT)
+    );
+
+    const dataRows: { index: number; data: Record<string, unknown>; missingFields: string[]; isIncomplete: boolean }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       const missingFields: string[] = [];
       for (const col of columns) {
         const val = row[col];
@@ -534,14 +604,21 @@ app.post("/api/full-data", (req: Request, res: Response) => {
           totalMissingCells++;
         }
       }
-      if (missingFields.length > 0) incompleteRowCount++;
-      return { index: i, data: row, missingFields, isIncomplete: missingFields.length > 0 };
-    });
+      const isIncomplete = missingFields.length > 0;
+      if (isIncomplete) incompleteRowCount++;
+
+      if (i >= safeOffset && i < safeOffset + safeLimit) {
+        dataRows.push({ index: i, data: row, missingFields, isIncomplete });
+      }
+    }
 
     res.json({
       columns,
       rows: dataRows,
       rowCount: rows.length,
+      offset: safeOffset,
+      limit: safeLimit,
+      hasMore: safeOffset + safeLimit < rows.length,
       missingByColumn,
       totalMissingCells,
       incompleteRowCount,
@@ -552,10 +629,102 @@ app.post("/api/full-data", (req: Request, res: Response) => {
   }
 });
 
+// GET /api/duplicates/:fileId
+// Returns every duplicate row detected (and auto-removed) during upload for this file, along
+// with whatever decision has since been made about each one ("removed" = confirmed gone,
+// "kept" = restored into the active dataset).
+app.get("/api/duplicates/:fileId", (req: Request, res: Response) => {
+  const { fileId } = req.params;
+  if (!fileStore.has(fileId)) {
+    return res.status(404).json({ error: "File not found or has expired. Please re-upload." });
+  }
+  const entries = duplicateHistoryStore.get(fileId) ?? [];
+  res.json({
+    entries,
+    totalDetected: entries.length,
+    keptCount: entries.filter((e) => e.status === "kept").length,
+    removedCount: entries.filter((e) => e.status === "removed").length,
+  });
+});
+
+// POST /api/duplicates/:fileId/resolve - body: { entryId, action: "keep" | "delete" }
+// Lets the user act on a single detected duplicate: "keep" restores that exact row back into
+// the active dataset (so it will appear in exports, sorting, and PCA/LDA again); "delete"
+// confirms it should stay excluded. Either way the decision is recorded on the history entry.
+app.post("/api/duplicates/:fileId/resolve", (req: Request, res: Response) => {
+  const { fileId } = req.params;
+  const { entryId, action } = req.body as { entryId?: string; action?: "keep" | "delete" };
+
+  const stored = fileStore.get(fileId);
+  if (!stored) {
+    return res.status(404).json({ error: "File not found or has expired. Please re-upload." });
+  }
+  if (!entryId) {
+    return res.status(400).json({ error: "entryId is required." });
+  }
+  if (action !== "keep" && action !== "delete") {
+    return res.status(400).json({ error: 'action must be "keep" or "delete".' });
+  }
+
+  const entries = duplicateHistoryStore.get(fileId) ?? [];
+  const entry = entries.find((e) => e.id === entryId);
+  if (!entry) {
+    return res.status(404).json({ error: "Duplicate entry not found." });
+  }
+
+  try {
+    if (action === "keep" && entry.status !== "kept") {
+      const rows = getStoredRows(stored);
+      rows.push(entry.row);
+      setStoredRows(stored, rows, Object.keys(rows[0] ?? entry.row));
+      entry.status = "kept";
+    } else if (action === "delete" && entry.status !== "removed") {
+      // Remove exactly one row matching this duplicate's content — not every row with that
+      // content, since the legitimate original row (identical by definition) must stay.
+      const rows = getStoredRows(stored);
+      const targetKey = JSON.stringify(entry.row);
+      let removedOne = false;
+      const filtered = rows.filter((row) => {
+        if (!removedOne && JSON.stringify(row) === targetKey) {
+          removedOne = true;
+          return false;
+        }
+        return true;
+      });
+      setStoredRows(stored, filtered, Object.keys(filtered[0] ?? entry.row));
+      entry.status = "removed";
+    }
+    entry.resolvedAt = Date.now();
+
+    res.json({ entry, rowsAfter: getStoredRows(stored).length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Something went wrong while updating the duplicate record." });
+  }
+});
+
+// GET /api/system/memory
+// Reports the backend process's current memory footprint so it can be shown live in the UI
+// while a large dataset is being processed. Polled from the frontend every few seconds.
+app.get("/api/system/memory", (_req: Request, res: Response) => {
+  const mem = process.memoryUsage();
+  const toMb = (bytes: number) => Math.round((bytes / (1024 * 1024)) * 10) / 10;
+  res.json({
+    rssMb: toMb(mem.rss),
+    heapUsedMb: toMb(mem.heapUsed),
+    heapTotalMb: toMb(mem.heapTotal),
+    externalMb: toMb(mem.external),
+    systemFreeMb: toMb(os.freemem()),
+    systemTotalMb: toMb(os.totalmem()),
+    timestamp: Date.now(),
+  });
+});
+
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
 
 app.listen(PORT, () => {
   console.log(`Excel sorter backend running on http://localhost:${PORT}`);
+  console.log(`Max upload size: ${MAX_UPLOAD_MB}MB`);
 });
