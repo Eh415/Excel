@@ -2011,4 +2011,202 @@ button.small.ghost:hover:not(:disabled) {
   .comparison-table th:last-child {
     display: none;
   }
+
+  .dup-history-table-wrap {
+    max-height: 50vh;
+  }
+
+  .memory-badge {
+    margin-top: 10px;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Memory Usage Display                                                      */
+/* ------------------------------------------------------------------------ */
+
+.memory-badge {
+  margin-top: 18px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.memory-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.memory-badge-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.memory-badge-value {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #fff;
+}
+
+.memory-badge-track {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.memory-badge-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--pine);
+  transition: width 0.4s ease;
+}
+
+.memory-badge-fill.warn {
+  background: var(--clay);
+}
+
+.memory-badge-fill.critical {
+  background: var(--error);
+}
+
+.memory-badge-sub {
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Duplicate Records History                                                 */
+/* ------------------------------------------------------------------------ */
+
+.stat-card-action {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 3px 9px;
+  font-size: 0.68rem;
+}
+
+.dup-history-card {
+  max-width: 880px;
+}
+
+.dup-history-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.dup-history-summary .ok {
+  color: var(--pine-dark);
+}
+
+.dup-history-summary .warn {
+  color: var(--clay);
+}
+
+.dup-history-summary strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.dup-history-table-wrap {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+}
+
+.dup-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.dup-history-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  text-align: left;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.dup-history-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.dup-history-table tr.kept {
+  background: #f2f7f4;
+}
+
+.dup-status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dup-status-pill.removed {
+  background: var(--clay-soft);
+  color: var(--clay);
+}
+
+.dup-status-pill.kept {
+  background: #dcecE3;
+  color: var(--pine-dark);
+}
+
+.dup-history-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Dataset preview pagination (large-dataset local testing)                  */
+/* ------------------------------------------------------------------------ */
+
+.preview-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.preview-pagination-count {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
 }
